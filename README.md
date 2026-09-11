@@ -8,6 +8,8 @@
 - **QQQ 历史上跌了多少**：图上画出了每一档加码的分界线
 - **这个规则过去管不管用**：和“每周固定金额”的普通定投做回测对比，还会换不同开始年份再比一遍
 - **用之前要知道的事**：最多一周要投多少、最长连续加码多久、历史上最长多久才回本
+- **我的买入记录**：记下每周实际买了多少，和规则建议对比，算出持仓、市值和平均成本
+- **定投日提醒**：定投日北京时间 20:00，GitHub 发邮件（和 GitHub App 推送）告诉你这周该投多少
 
 网站放在免费的 GitHub Pages 上。每个美股交易日收盘后（北京时间早上 6:30 左右），GitHub 会自动拉取最新行情并更新网站，手机和电脑都能打开。
 
@@ -65,6 +67,8 @@
 
 提交后，自动更新会马上开始第一次运行。
 
+想要定投日提醒，再用同样的方法新建 `.github/workflows/weekly-reminder.yml`，内容复制 `workflow/weekly-reminder.yml`。
+
 ### 第 6 步：确认运行成功
 
 1. 点仓库上方的 **Actions**。
@@ -93,6 +97,27 @@ https://你的用户名.github.io/nasdaq100-dca/
 
 ---
 
+## 我的买入记录
+
+网站上“我的买入记录”可以记下每次实际买入的日期、金额和成交价：
+
+- 选好日期后，会自动填入当天收盘价和规则建议金额，改成你的实际数字再点“添加记录”。
+- 每一笔都会显示规则建议投多少、你是多投还是少投，上方汇总持有股数、现在市值、浮动盈亏和平均成本。
+- 记录**只保存在当前设备的浏览器里**，不会上传到 GitHub（仓库是公开的）。清理浏览器数据会删掉记录，所以要定期点“导出备份”；换手机或电脑时，在新设备上点“导入备份”。
+
+## 定投日提醒
+
+仓库里的“定投日提醒”工作流（`.github/workflows/weekly-reminder.yml`）每个工作日北京时间 20:00 检查一次：
+
+- 如果今天（美东时间）是定投日，就在仓库的 **Issues** 里发一条提醒并 @你，写明这次按规则投多少、QQQ 离最高点跌了多少、美股几点开盘。
+- GitHub 会把提醒发到你注册 GitHub 用的邮箱；手机装了 **GitHub App** 并登录，还会收到推送。
+- 新提醒发出时，上一条会自动关闭。
+- 想马上试一下：打开 **Actions → 定投日提醒 → Run workflow**，会发一条测试提醒。
+- 提醒按 `docs/strategy.js` 里的 `DEFAULT_CONFIG` 计算。你在网页上改的设置只存在自己的浏览器里，GitHub 看不到；想让提醒也按新设置算，就改 `DEFAULT_CONFIG`。
+- 如果收不到邮件：在 GitHub 右上角头像 → Settings → Notifications 里，确认 “Participating, @mentions and custom” 勾选了 Email。
+
+---
+
 ## 常见问题
 
 **Actions 里出现红叉 ❌ 怎么办？**
@@ -109,7 +134,8 @@ GitHub 会暂停长期没有活动的仓库的定时任务。打开 **Actions**�
 
 **想检查计算逻辑？**
 ```bash
-node --test tests/strategy.test.js            # 规则和回测（15 项）
+node --test tests/strategy.test.js            # 规则、回测和买入记录（17 项）
+node --test tests/reminder.test.js            # 定投日提醒（5 项）
 python3 -m unittest tests/test_update_data.py # 数据更新脚本（需要 pandas）
 ```
 
@@ -124,9 +150,11 @@ nasdaq100-dca/
 │   ├── strategy.js            规则和回测计算（默认设置在最上面）
 │   └── data.json              QQQ 行情数据（自动更新，不用手动改）
 ├── scripts/
-│   └── update_data.py         拉行情、检查数据、写入 data.json
-├── workflow/
-│   └── update-and-deploy.yml  每天定时运行 + 发布网站（要复制到仓库的 .github/workflows/ 里，见第 5 步）
+│   ├── update_data.py         拉行情、检查数据、写入 data.json
+│   └── weekly_reminder.js     算出定投日该投多少，生成提醒内容
+├── workflow/                  工作流的可见副本（要复制到仓库的 .github/workflows/ 里，见第 5 步）
+│   ├── update-and-deploy.yml  每天定时更新数据 + 发布网站
+│   └── weekly-reminder.yml    定投日提醒
 ├── tests/                     自动测试
 └── requirements.txt           Python 依赖（yfinance）
 ```
