@@ -1,16 +1,30 @@
 /*
  * strategy.js —— 定投规则 + 历史回测（网页和测试共用这一份代码）
  *
- * 规则："跌多多投"
- *   1. 每周选一个交易日定投（默认周一；遇到美股休市，就用这周之后的第一个交易日）。
- *   2. 看"定投日前一个交易日的收盘价"离最高点跌了多少（回撤）。
- *   3. 回撤越大，倍数越高：投入金额 = 每周基础金额 × 倍数。
+ * 两种规则都是：每周选一个交易日定投（默认周一；遇到美股休市，就用这周之后的第一个交易日），
+ * 只看"定投日前一个交易日的收盘价"，投入金额 = 每周基础金额 × 倍数。
+ *
+ * 策略一 "跌多多投"（strategy: "tiered"）
+ *   离最高点跌得越多（回撤越大），倍数越高。
+ *
+ * 策略二 "趋势定投"（strategy: "trend"）：一直上涨时怎么投 + 下跌趋势里怎么投
+ *   先看价格在 200 日均线上面还是下面，再看离最高点跌了多少：
+ *   - 下跌趋势：跌破 200 日均线 → 加码，跌得越多投得越多（×1.5 / ×2 / ×3）
+ *   - 涨太多：  比 200 日均线高 15% 以上 → 少投（×0.5）
+ *   - 上涨中回调：在均线上方，但离最高点跌了 10% 以上 → 可以多投一点（默认 ×1，也就是不加码）
+ *   - 正常上涨：其他情况 → 正常投（×1）
+ *
+ * 默认设置是"综合策略"：趋势定投 + 回撤跟近一年最高点比 + 上涨中回调不加码。
+ * 用 1999 年以来的 QQQ 数据回测，它在不同时间段里比普通定投更稳定地略高一点，多投的钱和连续加码的时间也更少；
+ * 但它更高主要是因为下跌时多投了钱——总共的钱一样多时，每周按时全部投进去历史上反而更好。过去不代表未来。
  *
  * 借鉴的开源项目：
  *   - 分档倍数表：wangsunan98/NDX100-autopilot-calculator（按估值分档，用一个基础金额算出各档金额）
  *   - 用纳指回撤判断"低位"：kydchen/qqq-tqqq-signal-dashboard（回撤 ≤ -20% 视为低位信号）
  *   - 用 XIRR（资金加权年化收益率）衡量定投：refraction-ray/xalpha
  *   - 比较收益率而不是只比赚了多少钱：Elucidation/lumpsum_vs_dca
+ *   - 用 200 日均线区分上涨/下跌趋势：davidwang0116/Quant-QQQ-QLD-TQQQ-SMA200Timing-MixedPosition-Backtest
+ *   - 按价格偏离均线多少来调整定投金额：wangsunan98/NDX100-autopilot-calculator（250 日均线偏离）
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -22,19 +36,38 @@
 
   // ===== 默认设置：想改规则，改这里就行 =====
   var DEFAULT_CONFIG = {
+    strategy: "trend", // 用哪个策略："tiered"=跌多多投，"trend"=趋势定投（定投日提醒也按这个算）
     baseAmount: 100, // 每周基础金额（美元）
     investWeekday: 1, // 定投日：1=周一 2=周二 3=周三 4=周四 5=周五（美东时间）
-    basis: "ath", // 回撤参照："ath"=历史最高点，"52w"=近 52 周最高点
+    basis: "52w", // 回撤参照："ath"=历史最高点，"52w"=近 52 周最高点
     tiers: [
-      // 回撤达到 minDrawdown(%) 就用这一档的倍数
+      // 跌多多投：回撤达到 minDrawdown(%) 就用这一档的倍数
       { minDrawdown: 0, multiplier: 1 },
       { minDrawdown: 10, multiplier: 1.5 },
       { minDrawdown: 20, multiplier: 2 },
       { minDrawdown: 30, multiplier: 3 },
     ],
+    trend: {
+      // 趋势定投
+      maWindow: 200, // 用多少个交易日的均线判断趋势
+      hotAbove: 15, // 比均线高出 15% 以上算"涨太多"
+      hotMultiplier: 0.5, // 涨太多时投几倍
+      dipDrawdown: 10, // 在均线上方、离最高点跌了 10% 以上算"上涨中回调"
+      dipMultiplier: 1, // 回调时投几倍（1 = 不加码；想加码可以改成 1.5）
+      downTiers: [
+        // 跌破均线（下跌趋势）时：回撤达到 minDrawdown(%) 就用这一档的倍数
+        { minDrawdown: 0, multiplier: 1.5 },
+        { minDrawdown: 20, multiplier: 2 },
+        { minDrawdown: 30, multiplier: 3 },
+      ],
+    },
   };
 
   var WEEKDAY_CN = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  var STRATEGY_NAMES = { plain: "普通定投", tiered: "跌多多投", trend: "趋势定投" };
+  // 趋势定投的四种状态（按投入从少到多排列）
+  var TREND_STATES = ["hot", "up", "dip", "down"];
+  var TREND_LABELS = { hot: "涨太多", up: "正常上涨", dip: "上涨中回调", down: "下跌趋势" };
 
   // ---------- 日期工具（只用日期，不涉及时区） ----------
   function dayNumber(dateStr) {
@@ -53,7 +86,7 @@
   }
 
   // ---------- 设置 ----------
-  function normalizeTiers(tiers) {
+  function normalizeTiers(tiers, fallback) {
     var list = (tiers || [])
       .map(function (t) {
         return { minDrawdown: Number(t.minDrawdown), multiplier: Number(t.multiplier) };
@@ -64,7 +97,26 @@
       .sort(function (a, b) {
         return a.minDrawdown - b.minDrawdown;
       });
-    return list.length ? list : DEFAULT_CONFIG.tiers.slice();
+    if (list.length) return list;
+    return (fallback || DEFAULT_CONFIG.tiers).map(function (t) {
+      return { minDrawdown: t.minDrawdown, multiplier: t.multiplier };
+    });
+  }
+
+  function normalizeTrend(trend) {
+    var d = DEFAULT_CONFIG.trend, t = trend || {};
+    function num(v, def, min, max) {
+      v = v === "" || v == null ? NaN : Number(v);
+      return isFinite(v) && v >= min && v <= max ? v : def;
+    }
+    return {
+      maWindow: Math.round(num(t.maWindow, d.maWindow, 20, 400)),
+      hotAbove: num(t.hotAbove, d.hotAbove, 1, 100),
+      hotMultiplier: num(t.hotMultiplier, d.hotMultiplier, 0, 20),
+      dipDrawdown: num(t.dipDrawdown, d.dipDrawdown, 0, 95),
+      dipMultiplier: num(t.dipMultiplier, d.dipMultiplier, 0, 20),
+      downTiers: normalizeTiers(t.downTiers || d.downTiers, d.downTiers),
+    };
   }
 
   function withDefaults(config) {
@@ -72,10 +124,12 @@
     var base = Number(c.baseAmount);
     var wd = Number(c.investWeekday);
     return {
+      strategy: c.strategy === "trend" || c.strategy === "tiered" ? c.strategy : DEFAULT_CONFIG.strategy === "trend" ? "trend" : "tiered",
       baseAmount: isFinite(base) && base > 0 ? base : DEFAULT_CONFIG.baseAmount,
       investWeekday: wd >= 1 && wd <= 5 ? Math.round(wd) : DEFAULT_CONFIG.investWeekday,
-      basis: c.basis === "52w" ? "52w" : "ath",
+      basis: c.basis === "52w" || c.basis === "ath" ? c.basis : DEFAULT_CONFIG.basis,
       tiers: normalizeTiers(c.tiers || DEFAULT_CONFIG.tiers),
+      trend: normalizeTrend(c.trend),
     };
   }
 
@@ -139,6 +193,63 @@
     return k < 0 ? 1 : tiers[k].multiplier;
   }
 
+  // ---------- 趋势定投 ----------
+  // 简单移动平均；前 win 天数据不够时，用已有天数的平均
+  function movingAverage(values, win) {
+    var out = new Array(values.length), sum = 0;
+    for (var i = 0; i < values.length; i++) {
+      sum += values[i];
+      if (i >= win) sum -= values[i - win];
+      out[i] = sum / Math.min(i + 1, win);
+    }
+    return out;
+  }
+
+  // 均线和"比均线高多少"（百分数，7.5 表示比均线高 7.5%，-12 表示比均线低 12%）
+  function trendLines(series, maWindow) {
+    var win = maWindow || DEFAULT_CONFIG.trend.maWindow;
+    var ma = movingAverage(series.close, win);
+    var dev = new Array(series.n);
+    for (var i = 0; i < series.n; i++) dev[i] = (series.close[i] / ma[i] - 1) * 100;
+    return { ma: ma, dev: dev, window: win };
+  }
+
+  // 根据回撤和均线偏离，判断现在是哪种状态、投几倍
+  function trendState(ddPct, devPct, trend) {
+    var t = trend || DEFAULT_CONFIG.trend;
+    if (devPct < 0) {
+      var k = tierIndex(ddPct, t.downTiers);
+      return { key: "down", multiplier: k < 0 ? 1 : t.downTiers[k].multiplier, downTier: k };
+    }
+    if (devPct >= t.hotAbove) return { key: "hot", multiplier: t.hotMultiplier, downTier: -1 };
+    if (ddPct >= t.dipDrawdown - 1e-9) return { key: "dip", multiplier: t.dipMultiplier, downTier: -1 };
+    return { key: "up", multiplier: 1, downTier: -1 };
+  }
+
+  // 从某个下标起，四种状态各占多少比例的交易日
+  function trendShare(dd, dev, trend, fromIdx) {
+    var counts = { hot: 0, up: 0, dip: 0, down: 0 }, total = 0;
+    for (var i = fromIdx || 0; i < dd.length; i++) {
+      counts[trendState(dd[i], dev[i], trend).key]++;
+      total++;
+    }
+    var out = { total: total };
+    TREND_STATES.forEach(function (key) {
+      out[key] = total ? counts[key] / total : 0;
+    });
+    return out;
+  }
+
+  // 某个下标那天，按策略该投几倍（prevIdx = 用哪天的收盘价做决定）
+  function decide(cfg, strategy, dd, dev, prevIdx) {
+    if (strategy === "plain") return { multiplier: 1, state: null, downTier: -1 };
+    if (strategy === "trend") {
+      var st = trendState(dd[prevIdx], dev[prevIdx], cfg.trend);
+      return { multiplier: st.multiplier, state: st.key, downTier: st.downTier };
+    }
+    return { multiplier: multiplierFor(dd[prevIdx], cfg.tiers), state: null, downTier: -1 };
+  }
+
   // 每周的定投日（返回数据里的下标）
   function investDays(series, weekday) {
     var out = [], n = series.n, day = series.day, i = 0;
@@ -169,20 +280,32 @@
   }
 
   // ---------- 当前信号 ----------
-  function currentSignal(series, config) {
+  // pre：可选，提前算好的 { dd: drawdowns(...), tl: trendLines(...) }
+  function currentSignal(series, config, pre) {
     var cfg = withDefaults(config);
     if (!series.n) return null;
-    var d = drawdowns(series, cfg.basis);
+    pre = pre || {};
+    var d = pre.dd || drawdowns(series, cfg.basis);
+    var tl = pre.tl || trendLines(series, cfg.trend.maWindow);
     var last = series.n - 1;
     var k = tierIndex(d.dd[last], cfg.tiers);
-    var mult = k < 0 ? 1 : cfg.tiers[k].multiplier;
+    var tieredMult = k < 0 ? 1 : cfg.tiers[k].multiplier;
+    var st = trendState(d.dd[last], tl.dev[last], cfg.trend);
+    var mult = cfg.strategy === "trend" ? st.multiplier : tieredMult;
     return {
+      strategy: cfg.strategy,
       date: series.dates[last],
       close: series.close[last],
       peak: d.peak[last],
       peakDate: series.dates[d.peakIdx[last]],
       drawdown: d.dd[last],
       tierIndex: k,
+      ma: tl.ma[last],
+      deviation: tl.dev[last],
+      state: st.key,
+      downTier: st.downTier,
+      tieredMultiplier: tieredMult,
+      trendMultiplier: st.multiplier,
       multiplier: mult,
       amount: cfg.baseAmount * mult,
       nextDate: nextInvestDate(series.dates[last], cfg.investWeekday),
@@ -213,15 +336,18 @@
   }
 
   // ---------- 回测 ----------
-  // opts.plain = true  → 普通定投（每周固定金额）
+  // opts.strategy      → "plain"=普通定投（每周固定金额）、"tiered"=跌多多投、"trend"=趋势定投；不填就用设置里的策略
+  // opts.plain = true  → 同 strategy: "plain"
   // opts.startDate     → 从哪天开始（含）
-  // opts.dd            → 可选，提前算好的回撤数组（省时间）
+  // opts.dd / opts.dev → 可选，提前算好的回撤数组、均线偏离数组（省时间）
   function backtest(series, config, opts) {
     opts = opts || {};
     var cfg = withDefaults(config);
     var n = series.n;
     if (n < 2) return null;
+    var mode = opts.plain ? "plain" : opts.strategy === "plain" || opts.strategy === "tiered" || opts.strategy === "trend" ? opts.strategy : cfg.strategy;
     var dd = opts.dd || drawdowns(series, cfg.basis).dd;
+    var dev = mode === "trend" ? opts.dev || trendLines(series, cfg.trend.maWindow).dev : null;
     var days = investDays(series, cfg.investWeekday);
     var startDay = opts.startDate ? dayNumber(opts.startDate) : -Infinity;
 
@@ -236,12 +362,20 @@
     var boostedWeeks = 0, streak = 0, streakStart = null;
     var longest = 0, longestStart = null, longestEnd = null;
     var worst = 0, worstDate = null;
+    var trimmedWeeks = 0, trimmedTotal = 0;
+    var stateWeeks = { hot: 0, up: 0, dip: 0, down: 0 };
 
     for (var i = firstIdx; i < n; i++) {
       if (p < days.length && days[p] === i) {
         var ddPrev = dd[i - 1]; // 用前一个交易日收盘价做决定，避免"偷看未来"
-        var mult = opts.plain ? 1 : multiplierFor(ddPrev, cfg.tiers);
+        var dec = decide(cfg, mode, dd, dev, i - 1);
+        var mult = dec.multiplier;
         var amount = cfg.baseAmount * mult;
+        if (dec.state) stateWeeks[dec.state]++;
+        if (mult < 1) {
+          trimmedWeeks++;
+          trimmedTotal += cfg.baseAmount - amount;
+        }
         if (amount > 0) {
           sharesAdj += amount / series.adj[i];
           sharesRaw += amount / series.close[i];
@@ -271,6 +405,8 @@
           amount: amount,
           multiplier: mult,
           drawdown: ddPrev,
+          deviation: dev ? dev[i - 1] : null,
+          state: dec.state,
           close: series.close[i],
         });
         p++;
@@ -294,12 +430,15 @@
         amount: 0,
         multiplier: 0,
         drawdown: dd[last],
+        deviation: dev ? dev[last] : null,
+        state: null,
         close: series.close[last],
         final: true,
       });
     }
 
     return {
+      strategy: mode,
       startDate: series.dates[firstIdx],
       endDate: series.dates[last],
       weeks: flows.length,
@@ -315,30 +454,40 @@
       longestStreak: longest,
       longestStreakStart: longestStart,
       longestStreakEnd: longestEnd,
+      trimmedWeeks: trimmedWeeks,
+      trimmedTotal: trimmedTotal,
+      stateWeeks: mode === "trend" ? stateWeeks : null,
       worstReturn: worst,
       worstDate: worstDate,
       curve: curve,
     };
   }
 
-  // 同一套规则，换不同开始年份各跑一遍（看结论稳不稳）
-  function compareStarts(series, config, years) {
+  // 同一套设置，换不同开始年份，三种定投各跑一遍（看结论稳不稳）
+  // pre：可选 { dd: 回撤数组, dev: 均线偏离数组 }
+  function compareStarts(series, config, years, pre) {
     var cfg = withDefaults(config);
-    var dd = drawdowns(series, cfg.basis).dd;
+    pre = pre || {};
+    var dd = pre.dd || drawdowns(series, cfg.basis).dd;
+    var dev = pre.dev || trendLines(series, cfg.trend.maWindow).dev;
     var lastYear = series.n ? +series.dates[series.n - 1].slice(0, 4) : 0;
     var out = [];
     years.forEach(function (y) {
       if (y > lastYear - 1) return; // 至少留一年以上
       var start = y + "-01-01";
-      var a = backtest(series, cfg, { plain: true, startDate: start, dd: dd });
-      var b = backtest(series, cfg, { startDate: start, dd: dd });
-      if (!a || !b) return;
+      var a = backtest(series, cfg, { strategy: "plain", startDate: start, dd: dd });
+      var b = backtest(series, cfg, { strategy: "tiered", startDate: start, dd: dd });
+      var c = backtest(series, cfg, { strategy: "trend", startDate: start, dd: dd, dev: dev });
+      if (!a || !b || !c) return;
       out.push({
         year: y,
         plain: a,
         tiered: b,
+        trend: c,
         xirrDiff: b.xirr - a.xirr,
         investedRatio: b.invested / a.invested,
+        trendXirrDiff: c.xirr - a.xirr,
+        trendInvestedRatio: c.invested / a.invested,
       });
     });
     return out;
@@ -396,8 +545,9 @@
   }
 
   // ---------- 我的买入记录 ----------
-  // 某天买入时，按规则应该投多少：用那天之前最近一个交易日的收盘价算回撤
-  function suggestionForDate(series, config, dateStr, dd) {
+  // 某天买入时，按规则应该投多少：用那天之前最近一个交易日的收盘价算回撤（趋势定投还看均线）
+  // pre：可选，提前算好的回撤数组，或 { dd: 回撤数组, dev: 均线偏离数组 }
+  function suggestionForDate(series, config, dateStr, pre) {
     var cfg = withDefaults(config);
     var n = series.n;
     if (!n || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) return null;
@@ -411,15 +561,24 @@
     // lo = 当天或之后的第一个交易日；超出数据范围说明是最新数据之后的日子
     var prevIdx = lo < n ? lo - 1 : n - 1;
     if (prevIdx < 0) return null;
-    var ddArr = dd || drawdowns(series, cfg.basis).dd;
-    var mult = multiplierFor(ddArr[prevIdx], cfg.tiers);
+    var ddArr = Array.isArray(pre) ? pre : pre && pre.dd;
+    if (!ddArr) ddArr = drawdowns(series, cfg.basis).dd;
+    var devArr = null;
+    if (cfg.strategy === "trend") {
+      devArr = pre && !Array.isArray(pre) && pre.dev;
+      if (!devArr) devArr = trendLines(series, cfg.trend.maWindow).dev;
+    }
+    var dec = decide(cfg, cfg.strategy, ddArr, devArr, prevIdx);
     var sameDay = lo < n && series.day[lo] === target;
     return {
+      strategy: cfg.strategy,
       date: dateStr,
       basedOn: series.dates[prevIdx],
       drawdown: ddArr[prevIdx],
-      multiplier: mult,
-      amount: cfg.baseAmount * mult,
+      deviation: devArr ? devArr[prevIdx] : null,
+      state: dec.state,
+      multiplier: dec.multiplier,
+      amount: cfg.baseAmount * dec.multiplier,
       closeOnDate: sameDay ? series.close[lo] : null,
       latestClose: series.close[n - 1],
     };
@@ -430,7 +589,10 @@
   function summarizeTrades(series, config, trades) {
     var cfg = withDefaults(config);
     var n = series.n;
-    var dd = n ? drawdowns(series, cfg.basis).dd : [];
+    var pre = {
+      dd: n ? drawdowns(series, cfg.basis).dd : [],
+      dev: n && cfg.strategy === "trend" ? trendLines(series, cfg.trend.maWindow).dev : null,
+    };
     var list = (trades || [])
       .filter(function (t) {
         return t && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) && Number(t.amount) > 0 && Number(t.price) > 0;
@@ -443,7 +605,7 @@
     var flows = [];
     var rows = list.map(function (t) {
       var amount = Number(t.amount), price = Number(t.price);
-      var sug = n ? suggestionForDate(series, cfg, t.date, dd) : null;
+      var sug = n ? suggestionForDate(series, cfg, t.date, pre) : null;
       var sh = amount / price;
       invested += amount;
       shares += sh;
@@ -466,6 +628,8 @@
         suggested: sug ? sug.amount : null,
         multiplier: sug ? sug.multiplier : null,
         drawdown: sug ? sug.drawdown : null,
+        deviation: sug ? sug.deviation : null,
+        state: sug ? sug.state : null,
         basedOn: sug ? sug.basedOn : null,
         diff: diff,
       };
@@ -493,8 +657,69 @@
     };
   }
 
-  // 按年汇总：年末收盘价、当年涨跌（含分红）、当年最深回撤、两种定投年末的累计收益率
-  function yearly(series, dd, plainCurve, tieredCurve) {
+  // ---------- 买入记录备份（发到邮箱 / 粘贴导入） ----------
+  var BACKUP_BEGIN = "----- 定投备份开始 -----";
+  var BACKUP_END = "----- 定投备份结束 -----";
+
+  // 生成邮件备份：正文里放一行紧凑的 JSON，恢复时把两条横线之间的内容粘贴回网页
+  function formatTradesBackup(trades, opts) {
+    opts = opts || {};
+    var list = (trades || [])
+      .filter(function (t) {
+        return t && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) && Number(t.amount) > 0 && Number(t.price) > 0;
+      })
+      .slice()
+      .sort(function (a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      })
+      .map(function (t) {
+        var row = [t.date, Math.round(Number(t.amount) * 100) / 100, Math.round(Number(t.price) * 10000) / 10000];
+        if (t.note) row.push(String(t.note));
+        return row;
+      });
+    var json = JSON.stringify({ app: "nasdaq100-dca", v: 1, trades: list });
+    var day = opts.today ? opts.today + "，" : "";
+    var subject = "定投买入记录备份 " + (opts.today || "") + "（" + list.length + " 笔）";
+    var body = [
+      "这是我的纳指100定投买入记录备份（" + day + "共 " + list.length + " 笔）。",
+      "",
+      "恢复方法：打开 " + (opts.siteUrl || "定投网站") + "，在「我的买入记录」点「粘贴导入」，把下面两条横线之间的内容（连横线一起）粘贴进去。",
+      "",
+      BACKUP_BEGIN,
+      json,
+      BACKUP_END,
+      "",
+    ].join("\n");
+    return { subject: subject, body: body, json: json, count: list.length };
+  }
+
+  // 解析备份：支持邮件正文（带横线）、导出的 .json 文件内容；邮件被自动换行或加了“> ”引用也能读
+  function parseTradesBackup(text) {
+    var s = String(text == null ? "" : text);
+    var a = s.indexOf(BACKUP_BEGIN), b = s.indexOf(BACKUP_END);
+    if (a >= 0 && b > a) s = s.slice(a + BACKUP_BEGIN.length, b);
+    s = s.trim();
+    if (!s) throw new Error("没有找到备份内容");
+    var obj;
+    try {
+      obj = JSON.parse(s);
+    } catch (e) {
+      try {
+        obj = JSON.parse(s.replace(/^[ \t]*>[ \t]?/gm, "").replace(/[\r\n]+/g, ""));
+      } catch (e2) {
+        throw new Error("备份内容不完整或格式不对");
+      }
+    }
+    var list = Array.isArray(obj) ? obj : obj && obj.trades;
+    if (!Array.isArray(list)) throw new Error("没有找到买入记录");
+    return list.map(function (t) {
+      if (Array.isArray(t)) return { date: t[0], amount: t[1], price: t[2], note: t[3] || "" };
+      return t || {};
+    });
+  }
+
+  // 按年汇总：年末收盘价、当年涨跌（含分红）、当年最深回撤、三种定投年末的累计收益率
+  function yearly(series, dd, plainCurve, tieredCurve, trendCurve) {
     var out = [], byYear = {}, order = [];
     for (var i = 0; i < series.n; i++) {
       var y = series.dates[i].slice(0, 4);
@@ -523,6 +748,7 @@
         maxDrawdown: o.maxDd,
         plainReturn: lastInYear(plainCurve, y),
         tieredReturn: lastInYear(tieredCurve, y),
+        trendReturn: lastInYear(trendCurve, y),
       });
     });
     return out;
@@ -531,15 +757,23 @@
   return {
     DEFAULT_CONFIG: DEFAULT_CONFIG,
     WEEKDAY_CN: WEEKDAY_CN,
+    STRATEGY_NAMES: STRATEGY_NAMES,
+    TREND_STATES: TREND_STATES,
+    TREND_LABELS: TREND_LABELS,
     dayNumber: dayNumber,
     dateFromDayNumber: dateFromDayNumber,
     weekdayOf: weekdayOf,
     withDefaults: withDefaults,
     normalizeTiers: normalizeTiers,
+    normalizeTrend: normalizeTrend,
     prepare: prepare,
     drawdowns: drawdowns,
     tierIndex: tierIndex,
     multiplierFor: multiplierFor,
+    movingAverage: movingAverage,
+    trendLines: trendLines,
+    trendState: trendState,
+    trendShare: trendShare,
     investDays: investDays,
     nextInvestDate: nextInvestDate,
     currentSignal: currentSignal,
@@ -550,6 +784,8 @@
     longestUnderwater: longestUnderwater,
     suggestionForDate: suggestionForDate,
     summarizeTrades: summarizeTrades,
+    formatTradesBackup: formatTradesBackup,
+    parseTradesBackup: parseTradesBackup,
     yearly: yearly,
   };
 });
