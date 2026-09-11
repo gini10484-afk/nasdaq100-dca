@@ -194,3 +194,56 @@ test("按年汇总", () => {
   assert.ok(y[1].change > 0);
   assert.equal(y[1].maxDrawdown, 0);
 });
+
+test("买入记录：某天的规则建议用前一个交易日收盘价", () => {
+  const dates = tradingDays("2026-08-31", 10); // 8-31 周一 … 9-11 周五
+  const s = series(dates, [100, 100, 100, 100, 100, 100, 100, 100, 85, 100]);
+  // 9-11（周五）当天：前一天 9-10 收盘 85 → 回撤 15% → ×1.5
+  const a = DCA.suggestionForDate(s, { baseAmount: 200 }, "2026-09-11");
+  assert.equal(a.basedOn, "2026-09-10");
+  assert.equal(a.multiplier, 1.5);
+  assert.equal(a.amount, 300);
+  assert.equal(a.closeOnDate, 100);
+  // 9-13（周日）之后没有数据：用最新收盘 9-11（回撤 0）→ ×1
+  const b = DCA.suggestionForDate(s, { baseAmount: 200 }, "2026-09-13");
+  assert.equal(b.basedOn, "2026-09-11");
+  assert.equal(b.amount, 200);
+  assert.equal(b.closeOnDate, null);
+  // 周末买入：用周五收盘
+  const c = DCA.suggestionForDate(s, {}, "2026-09-06");
+  assert.equal(c.basedOn, "2026-09-04");
+  // 比第一天还早：没有依据
+  assert.equal(DCA.suggestionForDate(s, {}, "2026-08-31"), null);
+  assert.equal(DCA.suggestionForDate(s, {}, "不是日期"), null);
+});
+
+test("买入记录：汇总持仓、和规则对比", () => {
+  const dates = tradingDays("2026-08-03", 30);
+  const closes = dates.map(() => 100);
+  closes[12] = 80; // 8-19 周三跌到 80（回撤 20%）
+  const s = series(dates, closes);
+  const trades = [
+    { id: "b", date: dates[13], amount: 200, price: 80 }, // 前一天回撤 20% → 建议 ×2 = $200，照做
+    { id: "a", date: dates[5], amount: 150, price: 100 }, // 建议 $100，多投了 $50
+    { id: "x", date: "坏数据", amount: 100, price: 100 }, // 会被忽略
+    { id: "y", date: dates[6], amount: 0, price: 100 }, // 金额为 0 忽略
+  ];
+  const r = DCA.summarizeTrades(s, { baseAmount: 100 }, trades);
+  assert.equal(r.count, 2);
+  assert.deepEqual(r.rows.map((x) => x.id), ["a", "b"]); // 按日期排序
+  assert.equal(r.rows[0].suggested, 100);
+  assert.equal(r.rows[0].diff, 50);
+  assert.equal(r.rows[1].suggested, 200);
+  assert.equal(r.rows[1].multiplier, 2);
+  assert.equal(r.invested, 350);
+  assert.equal(r.suggestedTotal, 300);
+  assert.equal(r.followed, 1);
+  close(r.shares, 1.5 + 2.5);
+  close(r.value, 400); // 4 股 × 最新收盘 100
+  close(r.avgCost, 87.5);
+  close(r.profit, 50);
+  assert.equal(r.lastDate, dates[29]);
+  const empty = DCA.summarizeTrades(s, {}, []);
+  assert.equal(empty.count, 0);
+  assert.ok(Number.isNaN(empty.xirr));
+});
