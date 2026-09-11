@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的纳指100定投计划</title>
+<meta name="description" content="QQQ 每周定投：跌多多投信号 + 历史回测，每个美股交易日自动更新">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M6 22l6-6 5 4 9-10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-2: #f1f0ec;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --accent: #2a78d6;
+    --accent-ink: #1c5cab;
+    --focus: #2a78d6;
+    /* 图表系列颜色（色盲友好，已校验） */
+    --s-tiered: #2a78d6;
+    --s-plain: #eb6834;
+    --s-qqq: #1baf7a;
+    /* 分档颜色：同一色系由浅到深 */
+    --ramp-1: #86b6ef; --ramp-2: #5598e7; --ramp-3: #2a78d6; --ramp-4: #1c5cab; --ramp-5: #0d366b;
+    --warn-bg: #fdf3dc;
+    --warn-border: #f0d58f;
+    --warn-ink: #5c4200;
+    --warn-icon: #fab219;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #242423;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+      --accent: #3987e5; --accent-ink: #86b6ef; --focus: #6da7ec;
+      --s-tiered: #3987e5; --s-plain: #d95926; --s-qqq: #199e70;
+      --ramp-1: #184f95; --ramp-2: #2a78d6; --ramp-3: #5598e7; --ramp-4: #86b6ef; --ramp-5: #b7d3f6;
+      --warn-bg: #2b2411; --warn-border: #5a4a1c; --warn-ink: #f3dfa8; --warn-icon: #fab219;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #242423;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5; --accent-ink: #86b6ef; --focus: #6da7ec;
+    --s-tiered: #3987e5; --s-plain: #d95926; --s-qqq: #199e70;
+    --ramp-1: #184f95; --ramp-2: #2a78d6; --ramp-3: #5598e7; --ramp-4: #86b6ef; --ramp-5: #b7d3f6;
+    --warn-bg: #2b2411; --warn-border: #5a4a1c; --warn-ink: #f3dfa8; --warn-icon: #fab219;
+  }
+
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.6 system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  a { color: var(--accent-ink); }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 56px; }
+  h1, h2, h3 { margin: 0; line-height: 1.3; }
+  h1 { font-size: clamp(24px, 4vw, 30px); font-weight: 650; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 620; }
+  h3 { font-size: 15px; font-weight: 620; }
+  p { margin: 0; }
+
+  .eyebrow { color: var(--ink-2); font-size: 13px; letter-spacing: 0.02em; margin-bottom: 4px; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .top { margin-bottom: 18px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .stack > * + * { margin-top: 14px; }
+  .block { margin-top: 36px; }
+  .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+  .card-head { margin-bottom: 10px; }
+  .sub { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+  .hint { color: var(--ink-2); font-size: 13px; }
+  .small { font-size: 12px; color: var(--muted); }
+
+  /* ---------- 提醒条 ---------- */
+  .notice {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-ink);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px;
+  }
+  .notice .icon { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--warn-icon); color: #3a2a00; font-weight: 700; font-size: 13px; line-height: 20px; text-align: center; }
+
+  /* ---------- 设置 ---------- */
+  .settings { padding: 14px 16px; }
+  .settings-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
+  .field input, .field select, .inline-field select, .tier-row input {
+    font: inherit; font-size: 15px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--axis); border-radius: 8px;
+    padding: 7px 10px; min-height: 38px;
+  }
+  .money-input { display: flex; align-items: center; border: 1px solid var(--axis); border-radius: 8px; background: var(--surface); padding-left: 10px; }
+  .money-input span { color: var(--muted); font-size: 15px; }
+  .money-input input { border: 0; width: 92px; padding-left: 4px; background: transparent; }
+  .money-input:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .money-input input:focus-visible { outline: none; }
+  .btn {
+    font: inherit; font-size: 14px; color: var(--ink); cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; min-height: 38px;
+  }
+  .btn:hover { border-color: var(--axis); }
+  .btn.ghost { background: transparent; }
+  .settings .small { margin-top: 10px; }
+  .tier-editor { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--grid); }
+  .tier-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; font-size: 14px; color: var(--ink-2); }
+  .tier-row .sw { width: 10px; height: 22px; border-radius: 3px; flex: none; }
+  .tier-row input { width: 76px; min-height: 34px; padding: 5px 8px; }
+  .tier-row label { display: inline-flex; align-items: center; gap: 6px; }
+  .tier-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .link-btn { font: inherit; font-size: 13px; background: none; border: 0; color: var(--ink-2); text-decoration: underline; cursor: pointer; padding: 4px; }
+  .link-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ---------- 信号卡 ---------- */
+  .signal { margin-top: 14px; padding: 24px 22px 20px; }
+  .signal .label { color: var(--ink-2); font-size: 14px; }
+  .hero-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 2px; }
+  .hero { font-size: clamp(48px, 10vw, 64px); font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+  .sig-mult { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .sig-explain { color: var(--ink-2); margin-top: 10px; max-width: 680px; }
+  .ladder { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 6px; margin-top: 20px; }
+  .step { position: relative; padding-top: 22px; }
+  .step .bar { height: 10px; border-radius: 4px; }
+  .step.current .bar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+  .step .here { position: absolute; top: 0; left: 0; font-size: 12px; font-weight: 650; color: var(--ink); white-space: nowrap; }
+  .step .m { font-size: 16px; font-weight: 620; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .step .r { font-size: 12px; color: var(--ink-2); }
+  .step .s { font-size: 12px; color: var(--muted); }
+  .sig-foot { margin-top: 14px; }
+
+  /* ---------- 图表 ---------- */
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; touch-action: pan-y; overflow: visible; }
+  .chart svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 6px; }
+  .chart .grid { stroke: var(--grid); stroke-width: 1; }
+  .chart .axis { stroke: var(--axis); stroke-width: 1; }
+  .chart .ref { stroke: var(--axis); stroke-width: 1; }
+  .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .ref-label { fill: var(--ink-2); font-size: 11px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .chart .end-label { fill: var(--ink-2); font-size: 12px; }
+  .chart .cross { stroke: var(--ink-2); stroke-width: 1; }
+  .chart .ring { stroke: var(--surface); stroke-width: 2; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; flex: none; }
+  .key.area { height: 10px; width: 10px; border-radius: 2px; }
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none; min-width: 150px;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  }
+  .tip-date { color: var(--ink-2); margin-bottom: 4px; }
+  .tip-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; line-height: 1.7; }
+  .tip-row strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tip-row .tl { color: var(--ink-2); }
+  .tip-row .key.none { background: transparent; }
+
+  /* ---------- 表格 ---------- */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--ink-2); font-weight: 560; font-size: 13px; }
+  thead th .key { margin-right: 6px; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tr.em td { font-weight: 650; background: var(--surface-2); }
+  td .note { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  td.label { color: var(--ink-2); white-space: normal; min-width: 110px; }
+  tr.em td.label { color: var(--ink); }
+
+  details.card > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary::after { content: "展开"; font-weight: 400; font-size: 13px; color: var(--ink-2); }
+  details[open].card > summary::after { content: "收起"; }
+  details.card[open] > summary { margin-bottom: 12px; }
+
+  .inline-field { font-size: 14px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .verdict { font-size: 16px; line-height: 1.75; margin-bottom: 14px; max-width: 760px; }
+  .verdict b { font-weight: 650; }
+
+  .facts { margin: 0; padding: 0; list-style: none; }
+  .facts li { padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .facts li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .facts li:first-child { padding-top: 0; }
+  .facts b { display: block; font-weight: 620; margin-bottom: 2px; }
+  .facts span { color: var(--ink-2); }
+
+  .refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .refs a { text-decoration: none; display: block; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); }
+  .refs a:hover { border-color: var(--axis); }
+  .refs .name { font-weight: 600; font-size: 14px; word-break: break-all; }
+  .refs .what { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+
+  .empty ol { margin: 10px 0 0; padding-left: 20px; }
+  .empty li + li { margin-top: 6px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: center; }
+
+  @media (max-width: 560px) {
+    .card { padding: 16px; border-radius: 12px; }
+    .signal { padding: 20px 16px 16px; }
+    .ladder { gap: 4px; }
+    .step .m { font-size: 14px; }
+    .step .r, .step .s { font-size: 11px; }
+    th, td { padding: 8px 8px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">QQQ · 纳斯达克100 · 每周定投 · 跌多多投</p>
+    <h1>我的纳指100定投计划</h1>
+    <p class="meta" id="meta">正在读取行情数据…</p>
+  </header>
+
+  <div id="notice" class="notice" role="status" hidden><span class="icon" aria-hidden="true">!</span><span id="noticeText"></span></div>
+
+  <section class="card settings" aria-label="我的设置">
+    <div class="settings-row">
+      <label class="field">每周基础金额
+        <span class="money-input"><span>$</span><input id="base" type="number" min="1" step="10" inputmode="decimal"></span>
+      </label>
+      <label class="field">定投日（美东时间）
+        <select id="weekday">
+          <option value="1">每周一</option><option value="2">每周二</option><option value="3">每周三</option><option value="4">每周四</option><option value="5">每周五</option>
+        </select>
+      </label>
+      <label class="field">“跌了多少”跟谁比
+        <select id="basis">
+          <option value="ath">历史最高点</option>
+          <option value="52w">近一年最高点</option>
+        </select>
+      </label>
+      <button id="toggleTiers" class="btn" type="button" aria-expanded="false" aria-controls="tierEditor">调整分档</button>
+    </div>
+    <div id="tierEditor" class="tier-editor" hidden>
+      <p class="hint">回撤达到某个比例，就按对应倍数投。倍数填 0 表示那一档暂停不投。最多 5 档。</p>
+      <div id="tierRows"></div>
+      <div class="tier-actions">
+        <button id="addTier" class="btn" type="button">＋ 加一档</button>
+        <button id="resetTiers" class="btn ghost" type="button">恢复默认设置</button>
+      </div>
+    </div>
+    <p class="small">设置只保存在你这台设备的浏览器里，改完下面的信号和回测会马上重新计算。</p>
+  </section>
+
+  <section id="empty" class="card empty" hidden>
+    <h2 id="emptyTitle">还没有行情数据</h2>
+    <p class="hint" id="emptyText" style="margin-top:6px"></p>
+    <ol id="emptySteps">
+      <li>打开你的 GitHub 仓库，点上方的 <b>Actions</b>。</li>
+      <li>左边选 <b>每日更新数据并发布网站</b>，右边点 <b>Run workflow</b> → 绿色的 <b>Run workflow</b>。</li>
+      <li>等 2–3 分钟变成绿色对勾，再回来刷新这个页面。</li>
+    </ol>
+  </section>
+
+  <main id="app" hidden>
+    <section class="card signal" aria-labelledby="sigLabel">
+      <p class="label" id="sigLabel">下个定投日 · <span id="sigDate"></span></p>
+      <div class="hero-row">
+        <p class="hero" id="sigAmount"></p>
+        <p class="sig-mult" id="sigMult"></p>
+      </div>
+      <p class="sig-explain" id="sigExplain"></p>
+      <div class="ladder" id="ladder" role="list" aria-label="分档"></div>
+      <p class="small sig-foot" id="sigFoot"></p>
+    </section>
+
+    <section class="card" style="margin-top:14px">
+      <div class="card-head">
+        <h2 id="ddTitle">QQQ 离最高点跌了多少</h2>
+        <p class="sub" id="ddSub"></p>
+      </div>
+      <div class="chart" id="ddChart"></div>
+    </section>
+
+    <section class="block" aria-labelledby="btTitle">
+      <div class="section-head">
+        <h2 id="btTitle">这个规则过去管用吗？</h2>
+        <label class="inline-field">从 <select id="startYear"></select> 年初开始，每周定投到最新</label>
+      </div>
+      <p class="verdict" id="verdict"></p>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table id="cmpTable">
+            <thead>
+              <tr>
+                <th scope="col">指标</th>
+                <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投</th>
+                <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="small" style="margin-top:10px">跌多多投总共投的钱更多，所以直接比“赚了多少钱”不公平。<b>年化收益率（XIRR）</b>考虑了每一笔钱投进去的时间和金额，比较它最公平。</p>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-head">
+          <h3>账户收益率走势</h3>
+          <p class="sub">账户市值比投入本金多（或少）百分之几</p>
+        </div>
+        <div class="legend">
+          <span><i class="key" style="background:var(--s-plain)"></i>普通定投</span>
+          <span><i class="key" style="background:var(--s-tiered)"></i>跌多多投</span>
+        </div>
+        <div class="chart" id="retChart"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-head">
+          <h3>跌多多投：每周实际投入</h3>
+          <p class="sub" id="amtSub">加码的时候要准备更多钱</p>
+        </div>
+        <div class="chart" id="amtChart"></div>
+      </div>
+
+      <details class="card" style="margin-top:14px">
+        <summary>每年数据表</summary>
+        <div class="table-wrap">
+          <table id="yearTable">
+            <thead>
+              <tr>
+                <th scope="col">年份</th>
+                <th scope="col">年末收盘</th>
+                <th scope="col">当年涨跌<span class="note">含分红</span></th>
+                <th scope="col">当年最深回撤</th>
+                <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投<span class="note">年末累计收益率</span></th>
+                <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投<span class="note">年末累计收益率</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="block" aria-labelledby="startsTitle">
+      <div class="section-head"><h2 id="startsTitle">换个开始时间，结论还一样吗？</h2></div>
+      <p class="verdict" id="startsVerdict"></p>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="startsTable">
+            <thead>
+              <tr>
+                <th scope="col">从哪年开始</th>
+                <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投年化</th>
+                <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投年化</th>
+                <th scope="col">差距</th>
+                <th scope="col">跌多多投多投了</th>
+                <th scope="col">最长连续加码</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="mustTitle">
+      <div class="section-head"><h2 id="mustTitle">用之前一定要知道</h2></div>
+      <div class="card">
+        <ul class="facts" id="facts"></ul>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="refTitle">
+      <div class="section-head"><h2 id="refTitle">借鉴了这些开源项目</h2></div>
+      <div class="refs">
+        <a href="https://github.com/wangsunan98/NDX100-autopilot-calculator" target="_blank" rel="noopener"><div class="name">NDX100-autopilot-calculator</div><div class="what">分档倍数表：一个基础金额自动算出每一档投多少</div></a>
+        <a href="https://github.com/kydchen/qqq-tqqq-signal-dashboard" target="_blank" rel="noopener"><div class="name">qqq-tqqq-signal-dashboard</div><div class="what">用纳指回撤判断“低位”，设置保存在本地浏览器</div></a>
+        <a href="https://github.com/promise96319/qdii" target="_blank" rel="noopener"><div class="name">promise96319/qdii</div><div class="what">GitHub Actions 每天自动抓数据；数据不对就不覆盖</div></a>
+        <a href="https://github.com/scsfwgy/global_asset_history" target="_blank" rel="noopener"><div class="name">global_asset_history</div><div class="what">按周定投回测，展示收益曲线和历史回撤</div></a>
+        <a href="https://github.com/refraction-ray/xalpha" target="_blank" rel="noopener"><div class="name">xalpha</div><div class="what">用 XIRR 衡量定投的真实年化收益</div></a>
+        <a href="https://github.com/Elucidation/lumpsum_vs_dca" target="_blank" rel="noopener"><div class="name">lumpsum_vs_dca</div><div class="what">公平比较策略：看收益率，不只看赚了多少钱</div></a>
+        <a href="https://github.com/hzm0321/real-time-fund" target="_blank" rel="noopener"><div class="name">real-time-fund</div><div class="what">用 GitHub Actions 部署到 GitHub Pages</div></a>
+        <a href="https://github.com/ranaroussi/yfinance" target="_blank" rel="noopener"><div class="name">yfinance</div><div class="what">从 Yahoo Finance 获取 QQQ 历史行情</div></a>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer">数据来自 Yahoo Finance，每个美股交易日收盘后自动更新 · 本页面只帮你执行自己定的规则，不构成投资建议</footer>
+</div>
+
+<script src="strategy.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var STORE_KEY = "nasdaq100-dca-settings-v1";
+  var START_YEARS = [2000, 2002, 2005, 2008, 2010, 2013, 2015, 2018, 2020, 2022, 2024];
+  var MAX_TIERS = 5;
+  var MINUS = "−";
+
+  // ================= 格式化 =================
+  var usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  var usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function money(v) {
+    if (!isFinite(v)) return "—";
+    var s = Math.abs(v) >= 1000 || Math.abs(v - Math.round(v)) < 0.005 ? usd0.format(Math.abs(v)) : usd2.format(Math.abs(v));
+    return (v < 0 ? MINUS : "") + s;
+  }
+  function signedMoney(v) { return (v > 0 ? "+" : "") + money(v); }
+  function pct(v, digits, signed) {
+    if (v == null || !isFinite(v)) return "—";
+    var d = digits == null ? 1 : digits;
+    var s = (Math.abs(v) * 100).toFixed(d) + "%";
+    if (Number((Math.abs(v) * 100).toFixed(d)) === 0) return s;
+    if (v < 0) return MINUS + s;
+    return signed ? "+" + s : s;
+  }
+  function times(m) { return "×" + Number(m.toFixed(2)); }
+  function cnDate(ds, withWeekday) {
+    var p = ds.split("-");
+    var s = +p[0] + "年" + +p[1] + "月" + +p[2] + "日";
+    if (withWeekday) s += " " + DCA.WEEKDAY_CN[DCA.weekdayOf(DCA.dayNumber(ds))];
+    return s;
+  }
+  function shortDate(ds) { var p = ds.split("-"); return +p[0] + "." + +p[1] + "." + +p[2]; }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function multPhrase(m) {
+    if (m === 0) return "这一档暂停不投";
+    if (m === 1) return "正常投（×1）";
+    if (m > 1) return "加码到 " + Number(m.toFixed(2)) + " 倍";
+    return "少投，" + Number(m.toFixed(2)) + " 倍";
+  }
+  function todayDayNumber() {
+    var now = new Date();
+    return Math.round(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
+  }
+  // 美国夏令时：3 月第二个周日 ~ 11 月第一个周日
+  function isUsDst(ds) {
+    var y = +ds.slice(0, 4), d = DCA.dayNumber(ds);
+    function nthSunday(month, nth) {
+      var first = DCA.dayNumber(y + "-" + (month < 10 ? "0" : "") + month + "-01");
+      var offset = (7 - DCA.weekdayOf(first)) % 7;
+      return first + offset + (nth - 1) * 7;
+    }
+    return d >= nthSunday(3, 2) && d < nthSunday(11, 1);
+  }
+
+  // ================= 设置 =================
+  var state = { cfg: null, startYear: null, series: null, data: null, tiersOpen: false };
+
+  function loadSettings() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) { saved = null; }
+    state.cfg = DCA.withDefaults(saved || DCA.DEFAULT_CONFIG);
+    state.startYear = saved && saved.startYear ? +saved.startYear : null;
+  }
+  function saveSettings() {
+    try {
+      var o = JSON.parse(JSON.stringify(state.cfg));
+      o.startYear = state.startYear;
+      localStorage.setItem(STORE_KEY, JSON.stringify(o));
+    } catch (e) { /* 隐私模式等情况下存不了，不影响使用 */ }
+  }
+  function syncControls() {
+    $("base").value = state.cfg.baseAmount;
+    $("weekday").value = String(state.cfg.investWeekday);
+    $("basis").value = state.cfg.basis;
+    renderTierEditor();
+  }
+
+  function rampVar(k, n) {
+    var idx = n === 1 ? 3 : Math.round((k * 4) / (n - 1)) + 1;
+    return "var(--ramp-" + idx + ")";
+  }
+
+  function renderTierEditor() {
+    var box = $("tierRows");
+    box.textContent = "";
+    var tiers = state.cfg.tiers;
+    tiers.forEach(function (t, i) {
+      var row = el("div", "tier-row");
+      var sw = el("span", "sw");
+      sw.style.background = rampVar(i, tiers.length);
+      row.appendChild(sw);
+
+      var l1 = el("label");
+      l1.appendChild(document.createTextNode("回撤 ≥"));
+      var in1 = document.createElement("input");
+      in1.type = "number"; in1.min = "0"; in1.max = "95"; in1.step = "1"; in1.value = t.minDrawdown;
+      in1.setAttribute("aria-label", "第 " + (i + 1) + " 档的回撤比例");
+      l1.appendChild(in1);
+      l1.appendChild(document.createTextNode("%"));
+      row.appendChild(l1);
+
+      var l2 = el("label");
+      l2.appendChild(document.createTextNode("投 ×"));
+      var in2 = document.createElement("input");
+      in2.type = "number"; in2.min = "0"; in2.max = "20"; in2.step = "0.5"; in2.value = t.multiplier;
+      in2.setAttribute("aria-label", "第 " + (i + 1) + " 档的倍数");
+      l2.appendChild(in2);
+      row.appendChild(l2);
+
+      var del = el("button", "link-btn", "删除");
+      del.type = "button";
+      del.disabled = tiers.length <= 1;
+      del.setAttribute("aria-label", "删除第 " + (i + 1) + " 档");
+      row.appendChild(del);
+
+      in1.addEventListener("change", function () { updateTier(i, "minDrawdown", in1.value); });
+      in2.addEventListener("change", function () { updateTier(i, "multiplier", in2.value); });
+      del.addEventListener("click", function () {
+        state.cfg.tiers.splice(i, 1);
+        applyConfig();
+      });
+      box.appendChild(row);
+    });
+    $("addTier").disabled = tiers.length >= MAX_TIERS;
+  }
+  function updateTier(i, key, raw) {
+    var v = Number(raw);
+    if (!isFinite(v) || v < 0) { renderTierEditor(); return; }
+    if (key === "minDrawdown") v = Math.min(95, v);
+    if (key === "multiplier") v = Math.min(20, v);
+    state.cfg.tiers[i][key] = v;
+    applyConfig();
+  }
+  function applyConfig() {
+    state.cfg = DCA.withDefaults(state.cfg);
+    saveSettings();
+    syncControls();
+    if (state.series) renderAll();
+  }
+
+  function bindControls() {
+    var baseTimer = null;
+    function readBase() {
+      var v = Number($("base").value);
+      if (isFinite(v) && v > 0) state.cfg.baseAmount = v;
+    }
+    $("base").addEventListener("input", function () {
+      clearTimeout(baseTimer);
+      baseTimer = setTimeout(function () {
+        readBase();
+        saveSettings();
+        if (state.series) renderAll();
+      }, 250);
+    });
+    $("base").addEventListener("change", function () {
+      clearTimeout(baseTimer);
+      readBase();
+      applyConfig();
+    });
+    $("weekday").addEventListener("change", function () { state.cfg.investWeekday = +$("weekday").value; applyConfig(); });
+    $("basis").addEventListener("change", function () { state.cfg.basis = $("basis").value; applyConfig(); });
+    $("toggleTiers").addEventListener("click", function () {
+      state.tiersOpen = !state.tiersOpen;
+      $("tierEditor").hidden = !state.tiersOpen;
+      $("toggleTiers").setAttribute("aria-expanded", String(state.tiersOpen));
+      $("toggleTiers").textContent = state.tiersOpen ? "收起分档" : "调整分档";
+    });
+    $("addTier").addEventListener("click", function () {
+      var t = state.cfg.tiers, last = t[t.length - 1];
+      if (t.length >= MAX_TIERS) return;
+      t.push({ minDrawdown: Math.min(95, last.minDrawdown + 10), multiplier: Math.min(20, last.multiplier + 1) });
+      applyConfig();
+    });
+    $("resetTiers").addEventListener("click", function () {
+      var keepYear = state.startYear;
+      state.cfg = DCA.withDefaults(JSON.parse(JSON.stringify(DCA.DEFAULT_CONFIG)));
+      state.startYear = keepYear;
+      applyConfig();
+    });
+    $("startYear").addEventListener("change", function () {
+      state.startYear = +$("startYear").value;
+      saveSettings();
+      renderBacktest();
+    });
+  }
+
+  // ================= 图表（纯 SVG，无第三方库） =================
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function niceTicks(min, max, count) {
+    if (min === max) { min -= 1; max += 1; }
+    var raw = (max - min) / Math.max(1, count);
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var norm = raw / mag;
+    var step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+    var lo = Math.floor(min / step + 1e-9) * step, hi = Math.ceil(max / step - 1e-9) * step;
+    if (hi <= lo) hi = lo + step;
+    var ticks = [];
+    for (var v = lo; v <= hi + step * 1e-6; v += step) ticks.push(Math.abs(v) < step * 1e-6 ? 0 : v);
+    return { lo: lo, hi: hi, ticks: ticks };
+  }
+
+  // o: { xs:[day], dates:[str], series:[{color, values, area, step, endLabel}], yFormat, refLines:[{y,label}],
+  //      height, ariaLabel, tipTitle(i), tipRows(i) -> [{color, value, label}], endLabels, yFloor, yCeil, markLast }
+  function drawChart(host, o) {
+    host.textContent = "";
+    var n = o.xs.length;
+    if (n < 2) return;
+    var W = Math.max(280, Math.floor(host.clientWidth));
+    var narrow = W < 560;
+    var H = o.height || (narrow ? 220 : 260);
+    var m = { top: 12, right: o.endLabels && !narrow ? 104 : 14, bottom: 26, left: 50 };
+    var pw = W - m.left - m.right, ph = H - m.top - m.bottom;
+    var x0 = o.xs[0], x1 = o.xs[n - 1];
+    function X(d) { return m.left + ((d - x0) / (x1 - x0 || 1)) * pw; }
+
+    var ymin = Infinity, ymax = -Infinity;
+    o.series.forEach(function (s) {
+      for (var i = 0; i < n; i++) { var v = s.values[i]; if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
+    });
+    (o.refLines || []).forEach(function (r) { ymin = Math.min(ymin, r.y); ymax = Math.max(ymax, r.y); });
+    if (o.yFloor != null) ymin = Math.min(ymin, o.yFloor);
+    if (o.yCeil != null) ymax = Math.max(ymax, o.yCeil);
+    var t = niceTicks(ymin, ymax, narrow ? 4 : 5);
+    function Y(v) { return m.top + (1 - (v - t.lo) / (t.hi - t.lo || 1)) * ph; }
+
+    var root = svg("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0", "aria-label": o.ariaLabel });
+    var g = svg("g", {}, root);
+    t.ticks.forEach(function (v) {
+      var y = Y(v);
+      svg("line", { x1: m.left, x2: m.left + pw, y1: y, y2: y, "class": v === 0 ? "axis" : "grid" }, g);
+      var tx = svg("text", { x: m.left - 8, y: y, "class": "tick", "text-anchor": "end", "dominant-baseline": "middle" }, g);
+      tx.textContent = o.yFormat(v);
+    });
+    var yr0 = +o.dates[0].slice(0, 4), yr1 = +o.dates[n - 1].slice(0, 4);
+    var maxLabels = Math.max(2, Math.floor(pw / 52));
+    var stepY = [1, 2, 5, 10].filter(function (s) { return Math.ceil((yr1 - yr0 + 1) / s) <= maxLabels; })[0] || 10;
+    for (var yr = Math.ceil(yr0 / stepY) * stepY; yr <= yr1; yr += stepY) {
+      var dn = DCA.dayNumber(yr + "-01-01");
+      if (dn < x0 || dn > x1) continue;
+      var xx = X(dn);
+      svg("line", { x1: xx, x2: xx, y1: m.top + ph, y2: m.top + ph + 4, "class": "axis" }, g);
+      var lab = svg("text", { x: xx, y: m.top + ph + 17, "class": "tick", "text-anchor": "middle" }, g);
+      lab.textContent = yr;
+    }
+
+    o.series.forEach(function (s) {
+      var d = "";
+      for (var i = 0; i < n; i++) {
+        var px = X(o.xs[i]).toFixed(1), py = Y(s.values[i]).toFixed(1);
+        if (i === 0) d = "M" + px + "," + py;
+        else if (s.step) d += "H" + px + "V" + py;
+        else d += "L" + px + "," + py;
+      }
+      if (s.area) {
+        var base = Y(Math.max(t.lo, Math.min(0, t.hi))).toFixed(1);
+        svg("path", { d: d + "V" + base + "H" + X(x0).toFixed(1) + "Z", fill: "var(" + s.color + ")", "fill-opacity": "0.1", stroke: "none" }, root);
+      }
+      svg("path", { d: d, fill: "none", stroke: "var(" + s.color + ")", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
+    });
+
+    (o.refLines || []).forEach(function (r) {
+      var y = Y(r.y);
+      svg("line", { x1: m.left, x2: m.left + pw, y1: y, y2: y, "class": "ref" }, root);
+      var tx = svg("text", { x: m.left + 6, y: y - 5, "class": "ref-label" }, root);
+      tx.textContent = r.label;
+    });
+
+    if (o.markLast || o.endLabels) {
+      var ends = o.series.map(function (s) { return { s: s, y: Y(s.values[n - 1]) }; });
+      ends.forEach(function (e) {
+        svg("circle", { cx: X(x1), cy: e.y, r: 4, fill: "var(" + e.s.color + ")", "class": "ring" }, root);
+      });
+      if (o.endLabels && !narrow) {
+        var collide = ends.length > 1 && Math.abs(ends[0].y - ends[1].y) < 16;
+        if (!collide) {
+          ends.forEach(function (e) {
+            var tx = svg("text", { x: m.left + pw + 10, y: e.y, "class": "end-label", "dominant-baseline": "middle" }, root);
+            tx.textContent = e.s.endLabel;
+          });
+        }
+      }
+    }
+
+    var cross = svg("line", { y1: m.top, y2: m.top + ph, "class": "cross", visibility: "hidden" }, root);
+    var dots = o.series.map(function (s) {
+      return svg("circle", { r: 4, fill: "var(" + s.color + ")", "class": "ring", visibility: "hidden" }, root);
+    });
+    svg("rect", { x: m.left, y: m.top, width: pw, height: ph, fill: "transparent" }, root);
+    host.appendChild(root);
+    var tip = el("div", "tip");
+    tip.hidden = true;
+    host.appendChild(tip);
+
+    var cur = -1;
+    function nearest(px) {
+      var dd = x0 + ((px - m.left) / pw) * (x1 - x0);
+      var lo = 0, hi = n - 1;
+      while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (o.xs[mid] < dd) lo = mid; else hi = mid; }
+      return dd - o.xs[lo] <= o.xs[hi] - dd ? lo : hi;
+    }
+    function show(i) {
+      cur = Math.max(0, Math.min(n - 1, i));
+      var x = X(o.xs[cur]);
+      cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
+      o.series.forEach(function (s, k) {
+        dots[k].setAttribute("cx", x); dots[k].setAttribute("cy", Y(s.values[cur])); dots[k].setAttribute("visibility", "visible");
+      });
+      tip.textContent = "";
+      tip.appendChild(el("div", "tip-date", o.tipTitle(cur)));
+      o.tipRows(cur).forEach(function (r) {
+        var row = el("div", "tip-row");
+        var key = el("span", "key" + (r.color ? "" : " none"));
+        if (r.color) key.style.background = "var(" + r.color + ")";
+        row.appendChild(key);
+        row.appendChild(el("strong", null, r.value));
+        row.appendChild(el("span", "tl", r.label));
+        tip.appendChild(row);
+      });
+      tip.hidden = false;
+      var tw = tip.offsetWidth;
+      var left = x + 14;
+      if (left + tw > W) left = x - 14 - tw;
+      if (left < 0) left = Math.max(0, Math.min(W - tw, x - tw / 2));
+      tip.style.left = left + "px";
+      tip.style.top = m.top + "px";
+    }
+    function hide() {
+      cur = -1;
+      tip.hidden = true;
+      cross.setAttribute("visibility", "hidden");
+      dots.forEach(function (d) { d.setAttribute("visibility", "hidden"); });
+    }
+    function onPointer(e) {
+      var r = root.getBoundingClientRect();
+      var px = (e.clientX - r.left) * (W / r.width);
+      if (px < m.left - 10 || px > m.left + pw + 10) { hide(); return; }
+      show(nearest(px));
+    }
+    root.addEventListener("pointermove", onPointer);
+    root.addEventListener("pointerdown", onPointer);
+    root.addEventListener("pointerleave", hide);
+    root.addEventListener("focus", function () { show(n - 1); });
+    root.addEventListener("blur", hide);
+    root.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        var step = e.shiftKey ? 10 : 1;
+        show((cur < 0 ? n - 1 : cur) + (e.key === "ArrowLeft" ? -step : step));
+      } else if (e.key === "Home") { e.preventDefault(); show(0); }
+      else if (e.key === "End") { e.preventDefault(); show(n - 1); }
+      else if (e.key === "Escape") { hide(); }
+    });
+  }
+
+  // ================= 渲染 =================
+  var cache = {};
+
+  function renderAll() {
+    var s = state.series, cfg = state.cfg;
+    cache.dd = DCA.drawdowns(s, cfg.basis);
+    cache.sig = DCA.currentSignal(s, cfg);
+    renderSignal();
+    renderDrawdownChart();
+    renderBacktest();
+    renderStarts();
+    renderFacts();
+  }
+
+  function segmentsFor(tiers) {
+    var segs = tiers.map(function (t, k) { return { min: t.minDrawdown, mult: t.multiplier, tier: k }; });
+    if (segs[0].min > 0) segs.unshift({ min: 0, mult: 1, tier: -1, implicit: true });
+    segs.forEach(function (sg, i) { sg.max = i + 1 < segs.length ? segs[i + 1].min : null; });
+    return segs;
+  }
+
+  function renderSignal() {
+    var s = state.series, cfg = state.cfg, sig = cache.sig, dd = cache.dd;
+    var basisName = cfg.basis === "ath" ? "历史最高点" : "近一年最高点";
+    $("sigDate").textContent = cnDate(sig.nextDate, true);
+    $("sigAmount").textContent = money(sig.amount);
+    $("sigMult").textContent = multPhrase(sig.multiplier);
+
+    var dropText = sig.drawdown < 0.05
+      ? "现在就在" + basisName + "附近"
+      : "现在比" + basisName + " " + usd2.format(sig.peak) + "（" + cnDate(sig.peakDate) + "）低 " + sig.drawdown.toFixed(1) + "%";
+    $("sigExplain").textContent =
+      "QQQ 最新收盘 " + usd2.format(sig.close) + "（" + cnDate(sig.date) + "），" + dropText +
+      "。按你的规则：" + money(cfg.baseAmount) + " " + times(sig.multiplier) + " = " + money(sig.amount) + "。";
+
+    var segs = segmentsFor(cfg.tiers);
+    var share = DCA.tierShare(dd.dd, cfg.tiers, 0);
+    var ladder = $("ladder");
+    ladder.textContent = "";
+    ladder.style.setProperty("--n", segs.length);
+    segs.forEach(function (sg, i) {
+      var isCur = sg.tier === sig.tierIndex;
+      var step = el("div", "step" + (isCur ? " current" : ""));
+      step.setAttribute("role", "listitem");
+      if (isCur) step.appendChild(el("div", "here", "▼ 现在"));
+      var bar = el("div", "bar");
+      bar.style.background = rampVar(i, segs.length);
+      step.appendChild(bar);
+      step.appendChild(el("div", "m", times(sg.mult)));
+      var range = sg.max == null ? "跌 ≥" + sg.min + "%" : sg.min === 0 ? "跌不到 " + sg.max + "%" : "跌 " + sg.min + "–" + sg.max + "%";
+      step.appendChild(el("div", "r", range));
+      var sh = sg.tier < 0 ? share.below : share.shares[sg.tier];
+      step.appendChild(el("div", "s", "占 " + Math.round(sh * 100) + "% 的日子"));
+      step.setAttribute("aria-label", range + "，投 " + times(sg.mult) + "，历史上占 " + Math.round(sh * 100) + "% 的交易日" + (isCur ? "，现在在这一档" : ""));
+      ladder.appendChild(step);
+    });
+
+    var openBj = isUsDst(sig.nextDate) ? "21:30" : "22:30";
+    $("sigFoot").textContent =
+      "“占多少日子”按 " + s.dates[0].slice(0, 4) + " 年以来的交易日统计。信号每个交易日收盘后自动更新，定投日前以最新为准；遇美股休市顺延。" +
+      "美股开盘是北京时间 " + openBj + "。";
+  }
+
+  function weeklySample(n, day) {
+    // 每周取最后一个交易日，数据点少一点画得更快
+    var idx = [];
+    for (var i = 0; i < n; i++) {
+      var mon = day[i] - ((DCA.weekdayOf(day[i]) + 6) % 7);
+      var nextMon = i + 1 < n ? day[i + 1] - ((DCA.weekdayOf(day[i + 1]) + 6) % 7) : null;
+      if (nextMon !== mon) idx.push(i);
+    }
+    return idx;
+  }
+
+  function renderDrawdownChart() {
+    var s = state.series, cfg = state.cfg, dd = cache.dd;
+    var basisName = cfg.basis === "ath" ? "历史最高点" : "近一年最高点";
+    $("ddTitle").textContent = "QQQ 离" + basisName + "跌了多少";
+    $("ddSub").textContent = s.dates[0].slice(0, 4) + " 年至今，横线是加码的分界线";
+    var idx = weeklySample(s.n, s.day);
+    var xs = idx.map(function (i) { return s.day[i]; });
+    var dates = idx.map(function (i) { return s.dates[i]; });
+    var vals = idx.map(function (i) { return -dd.dd[i]; });
+    var tiers = cfg.tiers;
+    drawChart($("ddChart"), {
+      xs: xs, dates: dates,
+      series: [{ color: "--s-qqq", values: vals, area: true }],
+      yFormat: function (v) { return v === 0 ? "0" : MINUS + Math.abs(v) + "%"; },
+      yCeil: 0,
+      refLines: tiers.filter(function (t) { return t.minDrawdown > 0; }).map(function (t) {
+        return { y: -t.minDrawdown, label: "跌 " + t.minDrawdown + "% → " + times(t.multiplier) };
+      }),
+      markLast: true,
+      ariaLabel: "QQQ 回撤历史图，最新回撤 " + dd.dd[s.n - 1].toFixed(1) + "%。可以用左右方向键查看每周数据。",
+      tipTitle: function (i) { return cnDate(dates[i]); },
+      tipRows: function (i) {
+        var j = idx[i];
+        return [
+          { color: "--s-qqq", value: dd.dd[j] < 0.05 ? "0%" : MINUS + dd.dd[j].toFixed(1) + "%", label: "离最高点" },
+          { color: null, value: usd2.format(s.close[j]), label: "收盘价" },
+          { color: null, value: times(DCA.multiplierFor(dd.dd[j], tiers)), label: "当时的倍数" },
+        ];
+      },
+    });
+  }
+
+  function populateStartYears() {
+    var s = state.series;
+    var first = +s.dates[0].slice(0, 4);
+    if (s.dates[0].slice(5) > "01-15") first += 1;
+    var last = +s.dates[s.n - 1].slice(0, 4) - 1;
+    var sel = $("startYear");
+    sel.textContent = "";
+    for (var y = last; y >= first; y--) {
+      var op = document.createElement("option");
+      op.value = y; op.textContent = y;
+      sel.appendChild(op);
+    }
+    var def = Math.max(first, last + 1 - 10);
+    if (!state.startYear || state.startYear < first || state.startYear > last) state.startYear = def;
+    sel.value = String(state.startYear);
+  }
+
+  function renderBacktest() {
+    var s = state.series, cfg = state.cfg;
+    var dd = cache.dd;
+    var start = state.startYear + "-01-01";
+    var p = DCA.backtest(s, cfg, { plain: true, startDate: start, dd: dd.dd });
+    var t = DCA.backtest(s, cfg, { startDate: start, dd: dd.dd });
+    if (!p || !t) return;
+    cache.plain = p; cache.tiered = t;
+
+    // 结论
+    var diff = (t.xirr - p.xirr) * 100;
+    var cmp = diff >= 0.05 ? "高 " + diff.toFixed(2) + " 个百分点" : diff <= -0.05 ? "低 " + (-diff).toFixed(2) + " 个百分点" : "几乎一样";
+    var v = $("verdict");
+    v.textContent = "";
+    v.appendChild(document.createTextNode("从 " + cnDate(t.startDate) + " 开始：跌多多投的年化收益率 "));
+    v.appendChild(el("b", null, pct(t.xirr, 2)));
+    v.appendChild(document.createTextNode("，普通定投 "));
+    v.appendChild(el("b", null, pct(p.xirr, 2)));
+    v.appendChild(document.createTextNode("，" + cmp + "。"));
+    if (t.invested > p.invested) {
+      v.appendChild(document.createTextNode(
+        "代价是总共多投了 " + pct(t.invested / p.invested - 1, 0) + " 的钱，单周最多要投 " + money(t.maxAmount) +
+        "，最长连续 " + t.longestStreak + " 周都在加码。"
+      ));
+    } else {
+      v.appendChild(document.createTextNode("这段时间几乎没有触发加码，两种方式投的钱差不多。"));
+    }
+
+    // 对比表
+    var tb = $("cmpTable").tBodies[0];
+    tb.textContent = "";
+    function row(label, a, b, opts) {
+      opts = opts || {};
+      var tr = el("tr", opts.em ? "em" : "");
+      tr.appendChild(el("td", "label", label));
+      [a, b].forEach(function (cell) {
+        var td = el("td");
+        if (Array.isArray(cell)) { td.appendChild(document.createTextNode(cell[0])); td.appendChild(el("span", "note", cell[1])); }
+        else td.textContent = cell;
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    }
+    row("定投了几周", p.weeks + " 周", t.weeks + " 周");
+    row("总共投入", money(p.invested), money(t.invested));
+    row("现在市值", money(p.finalValue), money(t.finalValue));
+    row("赚了", signedMoney(p.profit), signedMoney(t.profit));
+    row("总收益率", pct(p.totalReturn, 1, true), pct(t.totalReturn, 1, true));
+    row("年化收益率（XIRR）", pct(p.xirr, 2), pct(t.xirr, 2), { em: true });
+    row("平均买入价", usd2.format(p.avgCost), usd2.format(t.avgCost));
+    row("单周最多投入", money(p.maxAmount), [money(t.maxAmount), t.maxAmountDate ? shortDate(t.maxAmountDate) : ""]);
+    row("加码的周数", "0 周", [t.boostedWeeks + " 周", "占 " + pct(t.boostedWeeks / t.weeks, 0)]);
+    row("最长连续加码", "—", t.longestStreak ? [t.longestStreak + " 周", shortDate(t.longestStreakStart) + " – " + shortDate(t.longestStreakEnd)] : "0 周");
+    row("最惨的时候浮亏", [pct(p.worstReturn, 1, true), p.worstDate ? shortDate(p.worstDate) : ""], [pct(t.worstReturn, 1, true), t.worstDate ? shortDate(t.worstDate) : ""]);
+
+    renderBacktestCharts();
+    renderYearTable();
+  }
+
+  function renderBacktestCharts() {
+    var p = cache.plain, t = cache.tiered, cfg = state.cfg;
+    if (!p || !t) return;
+    var xs = t.curve.map(function (c) { return DCA.dayNumber(c.date); });
+    var dates = t.curve.map(function (c) { return c.date; });
+    var rp = p.curve.map(function (c) { return c.value / c.invested - 1; });
+    var rt = t.curve.map(function (c) { return c.value / c.invested - 1; });
+    drawChart($("retChart"), {
+      xs: xs, dates: dates,
+      series: [
+        { color: "--s-plain", values: rp, endLabel: "普通 " + pct(rp[rp.length - 1], 0, true) },
+        { color: "--s-tiered", values: rt, endLabel: "跌多多投 " + pct(rt[rt.length - 1], 0, true) },
+      ],
+      yFormat: function (v) { return pct(v, 0, true); },
+      yFloor: 0,
+      endLabels: true,
+      ariaLabel: "两种定投的账户收益率走势。可以用左右方向键查看每周数据，完整数字见每年数据表。",
+      tipTitle: function (i) { return cnDate(dates[i]); },
+      tipRows: function (i) {
+        return [
+          { color: "--s-plain", value: pct(rp[i], 1, true), label: "普通定投 · 已投 " + money(p.curve[i].invested) },
+          { color: "--s-tiered", value: pct(rt[i], 1, true), label: "跌多多投 · 已投 " + money(t.curve[i].invested) },
+        ];
+      },
+    });
+
+    var weeks = t.curve.filter(function (c) { return !c.final; });
+    var axs = weeks.map(function (c) { return DCA.dayNumber(c.date); });
+    var adates = weeks.map(function (c) { return c.date; });
+    var amts = weeks.map(function (c) { return c.amount; });
+    $("amtSub").textContent = "横线是每周基础金额 " + money(cfg.baseAmount) + "，高出来的部分就是加码";
+    drawChart($("amtChart"), {
+      xs: axs, dates: adates,
+      height: 180,
+      series: [{ color: "--s-tiered", values: amts, area: true, step: true }],
+      yFormat: function (v) { return v === 0 ? "$0" : money(v); },
+      yFloor: 0,
+      refLines: [{ y: cfg.baseAmount, label: "基础金额" }],
+      ariaLabel: "跌多多投每周投入金额。最多一周 " + money(t.maxAmount) + "。",
+      tipTitle: function (i) { return cnDate(adates[i], true); },
+      tipRows: function (i) {
+        return [
+          { color: "--s-tiered", value: money(amts[i]), label: "这周投入" },
+          { color: null, value: times(weeks[i].multiplier), label: "倍数" },
+          { color: null, value: weeks[i].drawdown < 0.05 ? "0%" : MINUS + weeks[i].drawdown.toFixed(1) + "%", label: "前一天回撤" },
+        ];
+      },
+    });
+  }
+
+  function renderYearTable() {
+    var s = state.series, p = cache.plain, t = cache.tiered;
+    var rows = DCA.yearly(s, cache.dd.dd, p.curve, t.curve).reverse();
+    var tb = $("yearTable").tBodies[0];
+    tb.textContent = "";
+    rows.forEach(function (r) {
+      var tr = el("tr");
+      var yearCell = el("td", null, String(r.year));
+      if (r.partial) yearCell.appendChild(el("span", "note", r.year === +s.dates[s.n - 1].slice(0, 4) ? "截至 " + shortDate(s.dates[s.n - 1]) : "不满一年"));
+      tr.appendChild(yearCell);
+      tr.appendChild(el("td", null, usd2.format(r.close)));
+      tr.appendChild(el("td", null, pct(r.change, 1, true)));
+      tr.appendChild(el("td", null, r.maxDrawdown < 0.05 ? "0%" : MINUS + r.maxDrawdown.toFixed(1) + "%"));
+      tr.appendChild(el("td", null, r.plainReturn == null ? "—" : pct(r.plainReturn, 1, true)));
+      tr.appendChild(el("td", null, r.tieredReturn == null ? "—" : pct(r.tieredReturn, 1, true)));
+      tb.appendChild(tr);
+    });
+  }
+
+  function renderStarts() {
+    var s = state.series, cfg = state.cfg;
+    var rows = DCA.compareStarts(s, cfg, START_YEARS);
+    cache.starts = rows;
+    var tb = $("startsTable").tBodies[0];
+    tb.textContent = "";
+    var wins = 0, losses = 0, maxAbs = 0;
+    rows.forEach(function (r) {
+      var d = r.xirrDiff * 100;
+      if (d >= 0.05) wins++; else if (d <= -0.05) losses++;
+      maxAbs = Math.max(maxAbs, Math.abs(d));
+      var tr = el("tr");
+      tr.appendChild(el("td", null, r.year + " 年"));
+      tr.appendChild(el("td", null, pct(r.plain.xirr, 2)));
+      tr.appendChild(el("td", null, pct(r.tiered.xirr, 2)));
+      tr.appendChild(el("td", null, Math.abs(d) < 0.005 ? "0" : (d > 0 ? "+" : MINUS) + Math.abs(d).toFixed(2) + " 个点"));
+      tr.appendChild(el("td", null, pct(r.investedRatio - 1, 0)));
+      tr.appendChild(el("td", null, r.tiered.longestStreak + " 周"));
+      tb.appendChild(tr);
+    });
+    var even = rows.length - wins - losses;
+    $("startsVerdict").textContent = rows.length
+      ? "试了 " + rows.length + " 个不同的开始年份：跌多多投的年化收益率 " + wins + " 次更高、" + losses + " 次更低" +
+        (even ? "、" + even + " 次几乎一样" : "") + "，差距最大 " + maxAbs.toFixed(2) + " 个百分点。开始时间不同，结论可能不一样，这很正常。"
+      : "数据还不够长，暂时没法比较不同开始年份。";
+  }
+
+  function renderFacts() {
+    var s = state.series, cfg = state.cfg;
+    var ul = $("facts");
+    ul.textContent = "";
+    function fact(title, text) {
+      var li = el("li");
+      li.appendChild(el("b", null, title));
+      li.appendChild(el("span", null, text));
+      ul.appendChild(li);
+    }
+    fact("它不是预测", "规则只看“已经跌了多少”，不知道明天会涨还是会跌。跌了 20% 之后，还可能继续跌。");
+
+    var full = DCA.backtest(s, cfg, { dd: cache.dd.dd });
+    if (full) {
+      fact("加码要准备备用金",
+        "用现在的设置，如果从 " + cnDate(full.startDate) + " 就开始，单周最多要投 " + money(full.maxAmount) +
+        "，最长连续 " + full.longestStreak + " 周在加码，总投入是普通定投的 " + (full.invested / (cfg.baseAmount * full.weeks)).toFixed(2) +
+        " 倍。先确认自己拿得出这笔钱，否则真跌下来的时候规则执行不了。");
+    }
+    var u = DCA.longestUnderwater(s);
+    if (u) {
+      var yrs = (u.days / 365.25).toFixed(1);
+      fact("跌下去可能很久才回来",
+        "QQQ 历史上最长的一次：" + cnDate(u.peakDate) + " 见顶，最多跌了 " + u.maxDrawdown.toFixed(0) + "%，" +
+        (u.recoveryDate ? "到 " + cnDate(u.recoveryDate) + " 才回到那个高点，前后约 " + yrs + " 年。" : "到现在还没回到那个高点（已经约 " + yrs + " 年）。") +
+        (cfg.basis === "ath" ? "按“历史最高点”算，这段时间会一直处在加码状态。" : "按“近一年最高点”算，一年后高点会被“忘掉”，加码会停下来。"));
+    }
+    fact("回测没算的东西", "没有算券商手续费、美股分红税、人民币汇率变化，假设可以买零碎股、分红自动再投资。过去的表现不代表未来。");
+    fact("下单时间", "美股常规交易时间：北京时间 21:30 – 次日 04:00（夏令时，约 3 月中到 11 月初），冬令时是 22:30 – 次日 05:00。");
+    fact("这不是投资建议", "这个网站只是帮你把自己定的规则算清楚、执行下去。投多少、要不要调整规则，请根据自己的收入、备用金和风险承受能力决定。");
+  }
+
+  // ================= 启动 =================
+  function showNotice(text) {
+    $("noticeText").textContent = text;
+    $("notice").hidden = false;
+  }
+
+  function init(data) {
+    state.data = data;
+    var s = DCA.prepare(data);
+    if (s.n < 300) {
+      $("meta").textContent = "等待第一次自动更新";
+      $("emptyText").textContent = "网站已经部署好了，但还没抓到行情数据。第一次需要手动运行一下自动更新：";
+      $("empty").hidden = false;
+      return;
+    }
+    state.series = s;
+    var last = s.dates[s.n - 1];
+    $("meta").textContent = "行情更新到 " + cnDate(last) + "（美东收盘）· 来源：" + (data.source || "Yahoo Finance");
+    var lag = todayDayNumber() - s.day[s.n - 1];
+    if (lag > 5) {
+      showNotice("行情停在 " + cnDate(last) + "，已经 " + lag + " 天没更新了。去 GitHub 仓库的 Actions 页面看看自动更新是不是失败了（失败时 GitHub 会发邮件提醒你）。下面的信号仍按旧数据计算。");
+    }
+    if (data.source && data.source.indexOf("备用") >= 0) {
+      showNotice("今天用的是备用数据源，分红调整价是估算的，回测数字可能有一点点偏差；Yahoo 恢复后会自动修正。");
+    }
+    populateStartYears();
+    $("app").hidden = false;
+    renderAll();
+
+    var lastW = 0, timer = null;
+    var ro = new ResizeObserver(function (entries) {
+      var w = Math.round(entries[0].contentRect.width);
+      if (w === lastW) return;
+      lastW = w;
+      clearTimeout(timer);
+      timer = setTimeout(function () { renderDrawdownChart(); renderBacktestCharts(); }, 120);
+    });
+    ro.observe($("app"));
+  }
+
+  loadSettings();
+  syncControls();
+  bindControls();
+
+  fetch("data.json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(init)
+    .catch(function (err) {
+      $("meta").textContent = "没有读到行情数据";
+      $("emptyTitle").textContent = "没有读到行情数据";
+      $("emptyText").textContent = location.protocol === "file:"
+        ? "看起来你是直接双击打开的 index.html，浏览器不允许这样读取数据文件。请用 GitHub Pages 的网址打开；想在电脑上预览，可以在 docs 文件夹里运行 python3 -m http.server，再打开 http://localhost:8000 。"
+        : "读取 data.json 失败（" + err.message + "）。可以先按下面的步骤手动运行一次自动更新：";
+      $("emptySteps").hidden = location.protocol === "file:";
+      $("empty").hidden = false;
+    });
+})();
+</script>
+</body>
+</html>
