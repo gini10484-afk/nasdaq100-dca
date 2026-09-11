@@ -1,0 +1,7 @@
+{
+  "ticker": "QQQ",
+  "source": null,
+  "updated_at": null,
+  "columns": ["date", "close", "adj_close"],
+  "rows": []
+}
