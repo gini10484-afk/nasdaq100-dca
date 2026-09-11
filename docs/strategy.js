@@ -657,6 +657,113 @@
     };
   }
 
+  // ---------- 资金计划：手里的闲钱，每周该投多少 ----------
+  // 历史上每个定投周按规则投了几倍（用当前的策略和设置）
+  function weeklyMultipliers(series, config, pre) {
+    pre = pre || {};
+    var r = backtest(series, config, { dd: pre.dd, dev: pre.dev });
+    if (!r) return [];
+    return r.curve
+      .filter(function (c) {
+        return !c.final;
+      })
+      .map(function (c) {
+        return c.multiplier;
+      });
+  }
+
+  // input：{ cash: 现在的闲钱, monthly: 每月新增闲钱, share: 拿出多少比例投资(%), weeks: 现在这笔分几周投完,
+  //          rate: 1 美元换多少本币（人民币就填汇率，美元填 1）, mode: "safe" 保守 | "avg" 平均 }
+  // mults：weeklyMultipliers() 的结果；nowMultiplier：这周按规则的倍数
+  // 返回的金额：带 Local 的是本币，其余是美元
+  function planBudget(mults, input, nowMultiplier) {
+    input = input || {};
+    mults = mults || [];
+    function num(v, def) {
+      v = v === "" || v == null ? NaN : Number(v);
+      return isFinite(v) && v >= 0 ? v : def;
+    }
+    var cash = num(input.cash, 0);
+    var monthly = num(input.monthly, 0);
+    var share = Math.min(100, num(input.share, 0));
+    var weeks = Math.max(1, Math.round(num(input.weeks, 52)));
+    var rate = num(input.rate, 0) > 0 ? Number(input.rate) : 1;
+    var mode = input.mode === "avg" ? "avg" : "safe";
+
+    var poolLocal = (cash * share) / 100;
+    var monthlyLocal = (monthly * share) / 100;
+    var pool = poolLocal / rate; // 现在这笔拿出来投资的钱（美元）
+    var inflow = (monthlyLocal * 12) / 52 / rate; // 每月新增的投资钱，折成每周（美元）
+
+    var n = mults.length;
+    var ps = [0], maxMult = 0;
+    for (var i = 0; i < n; i++) {
+      ps.push(ps[i] + mults[i]);
+      if (mults[i] > maxMult) maxMult = mults[i];
+    }
+    var avgMult = n ? ps[n] / n : 1;
+    if (!(avgMult > 0)) avgMult = 1;
+
+    // 平均：长期平均下来，每周投的钱 ≈ 每周能拿出来的钱
+    var baseAvg = (pool / weeks + inflow) / avgMult;
+
+    // 保守：历史上不管从哪一周开始，接下来每一周累计要投的钱，都不超过到那时手里已有的钱
+    var baseSafe = Infinity, worstSum = 0;
+    var span = Math.min(weeks, n);
+    for (var t = 0; t < n; t++) {
+      for (var k = 1; k <= weeks && t + k <= n; k++) {
+        var s = ps[t + k] - ps[t];
+        if (s <= 0) continue;
+        var b = (pool + inflow * k) / s;
+        if (b < baseSafe) baseSafe = b;
+        if (k === span && s > worstSum) worstSum = s;
+      }
+    }
+    if (!isFinite(baseSafe)) baseSafe = baseAvg;
+
+    // 按某个基础金额，历史上最坏的时候还差多少钱（0 表示一直够用）
+    function shortfall(base) {
+      var worst = 0;
+      for (var t2 = 0; t2 < n; t2++) {
+        for (var k2 = 1; k2 <= weeks && t2 + k2 <= n; k2++) {
+          var need = base * (ps[t2 + k2] - ps[t2]) - (pool + inflow * k2);
+          if (need > worst) worst = need;
+        }
+      }
+      return worst;
+    }
+
+    var base = mode === "avg" ? baseAvg : baseSafe;
+    var m0 = nowMultiplier == null || !isFinite(Number(nowMultiplier)) ? 1 : Number(nowMultiplier);
+    var avgWeekly = base * avgMult;
+    var burn = avgWeekly - inflow;
+    var gap = shortfall(base);
+    return {
+      empty: !(pool + inflow > 0),
+      mode: mode,
+      rate: rate,
+      weeks: weeks,
+      poolLocal: poolLocal,
+      monthlyLocal: monthlyLocal,
+      pool: pool,
+      inflow: inflow,
+      avgMult: avgMult,
+      maxMult: maxMult,
+      baseAvg: baseAvg,
+      baseSafe: baseSafe,
+      base: base,
+      nowMultiplier: m0,
+      thisWeek: base * m0,
+      thisWeekLocal: base * m0 * rate,
+      avgWeekly: avgWeekly,
+      maxWeekly: base * maxMult,
+      worstSpend: base * worstSum, // 历史上最坏的连续 weeks 周（数据不够就按全部），一共要投多少
+      shortfall: gap,
+      shortfallLocal: gap * rate,
+      lastsWeeks: pool > 0 ? (burn > 1e-9 ? pool / burn : Infinity) : 0, // 按平均速度，现在这笔钱大约能投多少周
+    };
+  }
+
   // ---------- 买入记录备份（发到邮箱 / 粘贴导入） ----------
   var BACKUP_BEGIN = "----- 定投备份开始 -----";
   var BACKUP_END = "----- 定投备份结束 -----";
@@ -784,6 +891,8 @@
     longestUnderwater: longestUnderwater,
     suggestionForDate: suggestionForDate,
     summarizeTrades: summarizeTrades,
+    weeklyMultipliers: weeklyMultipliers,
+    planBudget: planBudget,
     formatTradesBackup: formatTradesBackup,
     parseTradesBackup: parseTradesBackup,
     yearly: yearly,
