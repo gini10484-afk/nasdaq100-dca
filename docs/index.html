@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>我的纳指100定投计划</title>
-<meta name="description" content="QQQ 每周定投：跌多多投信号 + 历史回测，每个美股交易日自动更新">
+<meta name="description" content="QQQ 每周定投：跌多多投 / 趋势定投信号 + 历史回测，每个美股交易日自动更新">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M6 22l6-6 5 4 9-10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -24,7 +24,8 @@
     /* 图表系列颜色（色盲友好，已校验） */
     --s-tiered: #2a78d6;
     --s-plain: #eb6834;
-    --s-qqq: #1baf7a;
+    --s-trend: #1baf7a;
+    --s-qqq: #75746f;
     /* 分档颜色：同一色系由浅到深 */
     --ramp-1: #86b6ef; --ramp-2: #5598e7; --ramp-3: #2a78d6; --ramp-4: #1c5cab; --ramp-5: #0d366b;
     --warn-bg: #fdf3dc;
@@ -39,7 +40,7 @@
       --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
       --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
       --accent: #3987e5; --accent-ink: #86b6ef; --focus: #6da7ec;
-      --s-tiered: #3987e5; --s-plain: #d95926; --s-qqq: #199e70;
+      --s-tiered: #3987e5; --s-plain: #d95926; --s-trend: #199e70; --s-qqq: #a3a29b;
       --ramp-1: #184f95; --ramp-2: #2a78d6; --ramp-3: #5598e7; --ramp-4: #86b6ef; --ramp-5: #b7d3f6;
       --warn-bg: #2b2411; --warn-border: #5a4a1c; --warn-ink: #f3dfa8; --warn-icon: #fab219;
     }
@@ -50,7 +51,7 @@
     --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
     --accent: #3987e5; --accent-ink: #86b6ef; --focus: #6da7ec;
-    --s-tiered: #3987e5; --s-plain: #d95926; --s-qqq: #199e70;
+    --s-tiered: #3987e5; --s-plain: #d95926; --s-trend: #199e70; --s-qqq: #a3a29b;
     --ramp-1: #184f95; --ramp-2: #2a78d6; --ramp-3: #5598e7; --ramp-4: #86b6ef; --ramp-5: #b7d3f6;
     --warn-bg: #2b2411; --warn-border: #5a4a1c; --warn-ink: #f3dfa8; --warn-icon: #fab219;
   }
@@ -128,6 +129,10 @@
   .tier-row .sw { width: 10px; height: 22px; border-radius: 3px; flex: none; }
   .tier-row input { width: 76px; min-height: 34px; padding: 5px 8px; }
   .tier-row label { display: inline-flex; align-items: center; gap: 6px; }
+  .tier-row .rule-name { font-weight: 600; color: var(--ink); min-width: 5.5em; }
+  .tier-row .fixed { color: var(--muted); }
+  th .cur { display: none; font-size: 12px; color: var(--ink); font-weight: 600; }
+  th.is-cur .cur { display: block; }
   .tier-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .link-btn { font: inherit; font-size: 13px; background: none; border: 0; color: var(--ink-2); text-decoration: underline; cursor: pointer; padding: 4px; }
   .link-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -186,7 +191,7 @@
   thead th .key { margin-right: 6px; vertical-align: middle; }
   tbody tr:last-child td { border-bottom: 0; }
   tr.em td { font-weight: 650; background: var(--surface-2); }
-  td .note { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  td .note, th .note { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
   td.label { color: var(--ink-2); white-space: normal; min-width: 110px; }
   tr.em td.label { color: var(--ink); }
 
@@ -235,6 +240,13 @@
   .tile .t-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
   td.note-cell { white-space: normal; min-width: 80px; max-width: 220px; text-align: left; color: var(--ink-2); }
   .sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .backup { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--grid); }
+  .backup-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+  .backup-row .field { flex: 1 1 220px; }
+  .backup-row .field input { width: 100%; }
+  .paste-box { margin-top: 12px; }
+  .paste-box .field { width: 100%; }
+  .paste-box textarea { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; resize: vertical; }
 
   @media (max-width: 560px) {
     .card { padding: 16px; border-radius: 12px; }
@@ -249,7 +261,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">QQQ · 纳斯达克100 · 每周定投 · 跌多多投</p>
+    <p class="eyebrow">QQQ · 纳斯达克100 · 每周定投 · <span id="eyebrowStrategy">跌多多投</span></p>
     <h1>我的纳指100定投计划</h1>
     <p class="meta" id="meta">正在读取行情数据…</p>
   </header>
@@ -258,6 +270,12 @@
 
   <section class="card settings" aria-label="我的设置">
     <div class="settings-row">
+      <label class="field">定投策略
+        <select id="strategy">
+          <option value="tiered">跌多多投</option>
+          <option value="trend">趋势定投</option>
+        </select>
+      </label>
       <label class="field">每周基础金额
         <span class="money-input"><span>$</span><input id="base" type="number" min="1" step="10" inputmode="decimal"></span>
       </label>
@@ -275,14 +293,20 @@
       <button id="toggleTiers" class="btn" type="button" aria-expanded="false" aria-controls="tierEditor">调整分档</button>
     </div>
     <div id="tierEditor" class="tier-editor" hidden>
-      <p class="hint">回撤达到某个比例，就按对应倍数投。倍数填 0 表示那一档暂停不投。最多 5 档。</p>
-      <div id="tierRows"></div>
+      <div id="tieredRules">
+        <p class="hint">回撤达到某个比例，就按对应倍数投。倍数填 0 表示那一档暂停不投。最多 5 档。</p>
+        <div id="tierRows"></div>
+      </div>
+      <div id="trendRules" hidden>
+        <p class="hint">先看 QQQ 在 200 日均线上面还是下面，再看离最高点跌了多少。从上往下，先满足哪条就按哪条投；倍数填 0 表示暂停不投。</p>
+        <div id="trendRows"></div>
+      </div>
       <div class="tier-actions">
         <button id="addTier" class="btn" type="button">＋ 加一档</button>
         <button id="resetTiers" class="btn ghost" type="button">恢复默认设置</button>
       </div>
     </div>
-    <p class="small">设置只保存在你这台设备的浏览器里，改完下面的信号和回测会马上重新计算。</p>
+    <p class="small" id="settingsNote">设置只保存在你这台设备的浏览器里，改完下面的信号和回测会马上重新计算。</p>
   </section>
 
   <section id="empty" class="card empty" hidden>
@@ -347,10 +371,27 @@
         </table>
       </div>
       <p class="hint" id="tEmpty" style="margin-top:12px">还没有记录。买完第一笔后，在上面填好日期、实际投入和成交价，点“添加记录”。</p>
-      <div class="tier-actions">
-        <button id="tExport" class="btn" type="button">导出备份</button>
-        <button id="tImportBtn" class="btn" type="button">导入备份</button>
-        <input id="tImport" type="file" accept="application/json,.json" hidden>
+      <div class="backup">
+        <h3>备份记录</h3>
+        <p class="small" style="margin-top:2px">记录只在这个浏览器里。发到邮箱或导出成文件保存一份，换设备、清理浏览器之后还能导回来。</p>
+        <div class="backup-row" style="margin-top:10px">
+          <label class="field">备份邮箱（只保存在这台设备）
+            <input id="tEmail" type="email" inputmode="email" autocomplete="email" placeholder="比如 12345@qq.com">
+          </label>
+          <button id="tMail" class="btn primary" type="button">发到邮箱</button>
+        </div>
+        <div class="tier-actions">
+          <button id="tExport" class="btn" type="button">导出备份</button>
+          <button id="tImportBtn" class="btn" type="button">导入备份</button>
+          <button id="tPasteBtn" class="btn" type="button" aria-expanded="false" aria-controls="tPasteBox">粘贴导入</button>
+          <input id="tImport" type="file" accept="application/json,.json" hidden>
+        </div>
+        <div id="tPasteBox" class="paste-box" hidden>
+          <label class="field">把备份邮件里两条横线之间的内容（连横线一起）粘贴到这里
+            <textarea id="tPaste" rows="4" spellcheck="false"></textarea>
+          </label>
+          <div class="tier-actions"><button id="tPasteImport" class="btn primary" type="button">导入这些记录</button></div>
+        </div>
       </div>
       <p class="small" id="tMsg" aria-live="polite" style="margin-top:8px"></p>
     </section>
@@ -361,6 +402,14 @@
         <p class="sub" id="ddSub"></p>
       </div>
       <div class="chart" id="ddChart"></div>
+    </section>
+
+    <section class="card" id="devCard" style="margin-top:14px" hidden>
+      <div class="card-head">
+        <h2 id="devTitle">QQQ 比 200 日均线高多少</h2>
+        <p class="sub" id="devSub"></p>
+      </div>
+      <div class="chart" id="devChart"></div>
     </section>
 
     <section class="block" aria-labelledby="btTitle">
@@ -377,13 +426,14 @@
               <tr>
                 <th scope="col">指标</th>
                 <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投</th>
-                <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投</th>
+                <th scope="col" data-s="tiered"><span class="key" style="background:var(--s-tiered)"></span>跌多多投<span class="cur">当前策略</span></th>
+                <th scope="col" data-s="trend"><span class="key" style="background:var(--s-trend)"></span>趋势定投<span class="cur">当前策略</span></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="small" style="margin-top:10px">跌多多投总共投的钱更多，所以直接比“赚了多少钱”不公平。<b>年化收益率（XIRR）</b>考虑了每一笔钱投进去的时间和金额，比较它最公平。</p>
+        <p class="small" style="margin-top:10px">三种方式每周投的钱不一样，总投入不同，所以直接比“赚了多少钱”不公平。<b>年化收益率（XIRR）</b>考虑了每一笔钱投进去的时间和金额，比较它最公平。</p>
       </div>
 
       <div class="card" style="margin-top:14px">
@@ -394,13 +444,14 @@
         <div class="legend">
           <span><i class="key" style="background:var(--s-plain)"></i>普通定投</span>
           <span><i class="key" style="background:var(--s-tiered)"></i>跌多多投</span>
+          <span><i class="key" style="background:var(--s-trend)"></i>趋势定投</span>
         </div>
         <div class="chart" id="retChart"></div>
       </div>
 
       <div class="card" style="margin-top:14px">
         <div class="card-head">
-          <h3>跌多多投：每周实际投入</h3>
+          <h3 id="amtTitle">跌多多投：每周实际投入</h3>
           <p class="sub" id="amtSub">加码的时候要准备更多钱</p>
         </div>
         <div class="chart" id="amtChart"></div>
@@ -418,6 +469,7 @@
                 <th scope="col">当年最深回撤</th>
                 <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投<span class="note">年末累计收益率</span></th>
                 <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投<span class="note">年末累计收益率</span></th>
+                <th scope="col"><span class="key" style="background:var(--s-trend)"></span>趋势定投<span class="note">年末累计收益率</span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -435,11 +487,11 @@
             <thead>
               <tr>
                 <th scope="col">从哪年开始</th>
-                <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投年化</th>
-                <th scope="col"><span class="key" style="background:var(--s-tiered)"></span>跌多多投年化</th>
-                <th scope="col">差距</th>
-                <th scope="col">跌多多投多投了</th>
-                <th scope="col">最长连续加码</th>
+                <th scope="col"><span class="key" style="background:var(--s-plain)"></span>普通定投<span class="note">年化收益率</span></th>
+                <th scope="col" data-s="tiered"><span class="key" style="background:var(--s-tiered)"></span>跌多多投<span class="note">年化 · 和普通比</span><span class="cur">当前策略</span></th>
+                <th scope="col" data-s="trend"><span class="key" style="background:var(--s-trend)"></span>趋势定投<span class="note">年化 · 和普通比</span><span class="cur">当前策略</span></th>
+                <th scope="col">跌多多投<span class="note">多投了 · 最长连续加码</span></th>
+                <th scope="col">趋势定投<span class="note">多投了 · 最长连续加码</span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -458,7 +510,8 @@
     <section class="block" aria-labelledby="refTitle">
       <div class="section-head"><h2 id="refTitle">借鉴了这些开源项目</h2></div>
       <div class="refs">
-        <a href="https://github.com/wangsunan98/NDX100-autopilot-calculator" target="_blank" rel="noopener"><div class="name">NDX100-autopilot-calculator</div><div class="what">分档倍数表：一个基础金额自动算出每一档投多少</div></a>
+        <a href="https://github.com/wangsunan98/NDX100-autopilot-calculator" target="_blank" rel="noopener"><div class="name">NDX100-autopilot-calculator</div><div class="what">分档倍数表：一个基础金额自动算出每一档投多少；按偏离均线多少调整金额</div></a>
+        <a href="https://github.com/davidwang0116/Quant-QQQ-QLD-TQQQ-SMA200Timing-MixedPosition-Backtest" target="_blank" rel="noopener"><div class="name">Quant-QQQ-SMA200Timing</div><div class="what">用 200 日均线区分 QQQ 的上涨和下跌趋势</div></a>
         <a href="https://github.com/kydchen/qqq-tqqq-signal-dashboard" target="_blank" rel="noopener"><div class="name">qqq-tqqq-signal-dashboard</div><div class="what">用纳指回撤判断“低位”，设置保存在本地浏览器</div></a>
         <a href="https://github.com/promise96319/qdii" target="_blank" rel="noopener"><div class="name">promise96319/qdii</div><div class="what">GitHub Actions 每天自动抓数据；数据不对就不覆盖</div></a>
         <a href="https://github.com/scsfwgy/global_asset_history" target="_blank" rel="noopener"><div class="name">global_asset_history</div><div class="what">按周定投回测，展示收益曲线和历史回撤</div></a>
@@ -542,6 +595,12 @@
   function loadSettings() {
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) { saved = null; }
+    if (saved && !saved.strategy) {
+      // 旧版本存的设置里还没有“策略”：金额、定投日、分档保留，策略和回撤参照换成新的默认值
+      saved.strategy = DCA.DEFAULT_CONFIG.strategy;
+      saved.basis = DCA.DEFAULT_CONFIG.basis;
+      delete saved.trend;
+    }
     state.cfg = DCA.withDefaults(saved || DCA.DEFAULT_CONFIG);
     state.startYear = saved && saved.startYear ? +saved.startYear : null;
   }
@@ -552,17 +611,83 @@
       localStorage.setItem(STORE_KEY, JSON.stringify(o));
     } catch (e) { /* 隐私模式等情况下存不了，不影响使用 */ }
   }
+  function isTrend() { return state.cfg.strategy === "trend"; }
+  function strategyName(k) { return DCA.STRATEGY_NAMES[k || state.cfg.strategy]; }
+
   function syncControls() {
+    var trend = isTrend();
+    $("strategy").value = state.cfg.strategy;
     $("base").value = state.cfg.baseAmount;
     $("weekday").value = String(state.cfg.investWeekday);
     $("basis").value = state.cfg.basis;
+    $("eyebrowStrategy").textContent = strategyName();
+    $("tieredRules").hidden = trend;
+    $("trendRules").hidden = !trend;
+    $("toggleTiers").textContent = state.tiersOpen ? (trend ? "收起规则" : "收起分档") : trend ? "调整规则" : "调整分档";
     renderTierEditor();
+    renderTrendEditor();
+    $("addTier").hidden = trend;
+    Array.prototype.forEach.call(document.querySelectorAll("th[data-s]"), function (th) {
+      th.classList.toggle("is-cur", th.getAttribute("data-s") === state.cfg.strategy);
+    });
+  }
+
+  // 趋势定投规则编辑：按判断顺序排列（先满足哪条就按哪条投）
+  function renderTrendEditor() {
+    var box = $("trendRows");
+    box.textContent = "";
+    var t = state.cfg.trend;
+    function numInput(value, opts, onChange) {
+      var inp = document.createElement("input");
+      inp.type = "number"; inp.min = String(opts.min); inp.max = String(opts.max); inp.step = String(opts.step); inp.value = value;
+      inp.setAttribute("aria-label", opts.label);
+      inp.addEventListener("change", function () {
+        var v = Number(inp.value);
+        if (inp.value === "" || !isFinite(v) || v < opts.min) { renderTrendEditor(); return; }
+        onChange(Math.min(opts.max, v));
+        applyConfig();
+      });
+      return inp;
+    }
+    function row(color, name, parts) {
+      var r = el("div", "tier-row");
+      var sw = el("span", "sw");
+      sw.style.background = color;
+      r.appendChild(sw);
+      r.appendChild(el("span", "rule-name", name));
+      parts.forEach(function (p) { r.appendChild(p); });
+      box.appendChild(r);
+    }
+    function label(before, input, after) {
+      var l = el("label");
+      if (before) l.appendChild(document.createTextNode(before));
+      if (input) l.appendChild(input);
+      if (after) l.appendChild(document.createTextNode(after));
+      return l;
+    }
+    t.downTiers.forEach(function (tier, i) {
+      row(STATE_COLORS.down, i === 0 ? "下跌趋势" : "", [
+        label("跌破均线，回撤 ≥", numInput(tier.minDrawdown, { min: 0, max: 95, step: 1, label: "下跌趋势第 " + (i + 1) + " 档的回撤比例" }, function (v) { state.cfg.trend.downTiers[i].minDrawdown = v; }), "%"),
+        label("投 ×", numInput(tier.multiplier, { min: 0, max: 20, step: 0.5, label: "下跌趋势第 " + (i + 1) + " 档的倍数" }, function (v) { state.cfg.trend.downTiers[i].multiplier = v; })),
+      ]);
+    });
+    row(STATE_COLORS.hot, "涨太多", [
+      label("比均线高 ≥", numInput(t.hotAbove, { min: 1, max: 100, step: 1, label: "涨太多：比均线高出的比例" }, function (v) { state.cfg.trend.hotAbove = v; }), "%"),
+      label("投 ×", numInput(t.hotMultiplier, { min: 0, max: 20, step: 0.1, label: "涨太多时的倍数" }, function (v) { state.cfg.trend.hotMultiplier = v; })),
+    ]);
+    row(STATE_COLORS.dip, "上涨中回调", [
+      label("在均线上方，回撤 ≥", numInput(t.dipDrawdown, { min: 0, max: 95, step: 1, label: "上涨中回调：回撤比例" }, function (v) { state.cfg.trend.dipDrawdown = v; }), "%"),
+      label("投 ×", numInput(t.dipMultiplier, { min: 0, max: 20, step: 0.5, label: "上涨中回调时的倍数" }, function (v) { state.cfg.trend.dipMultiplier = v; })),
+    ]);
+    row(STATE_COLORS.up, "正常上涨", [el("span", "fixed", "其他情况，投 ×1")]);
   }
 
   function rampVar(k, n) {
     var idx = n === 1 ? 3 : Math.round((k * 4) / (n - 1)) + 1;
     return "var(--ramp-" + idx + ")";
   }
+  // 趋势定投四种状态的颜色：投得越多颜色越深
+  var STATE_COLORS = { hot: "var(--ramp-1)", up: "var(--ramp-2)", dip: "var(--ramp-4)", down: "var(--ramp-5)" };
 
   function renderTierEditor() {
     var box = $("tierRows");
@@ -641,13 +766,14 @@
       readBase();
       applyConfig();
     });
+    $("strategy").addEventListener("change", function () { state.cfg.strategy = $("strategy").value; applyConfig(); });
     $("weekday").addEventListener("change", function () { state.cfg.investWeekday = +$("weekday").value; applyConfig(); });
     $("basis").addEventListener("change", function () { state.cfg.basis = $("basis").value; applyConfig(); });
     $("toggleTiers").addEventListener("click", function () {
       state.tiersOpen = !state.tiersOpen;
       $("tierEditor").hidden = !state.tiersOpen;
       $("toggleTiers").setAttribute("aria-expanded", String(state.tiersOpen));
-      $("toggleTiers").textContent = state.tiersOpen ? "收起分档" : "调整分档";
+      syncControls();
     });
     $("addTier").addEventListener("click", function () {
       var t = state.cfg.tiers, last = t[t.length - 1];
@@ -656,8 +782,9 @@
       applyConfig();
     });
     $("resetTiers").addEventListener("click", function () {
-      var keepYear = state.startYear;
+      var keepYear = state.startYear, keepStrategy = state.cfg.strategy;
       state.cfg = DCA.withDefaults(JSON.parse(JSON.stringify(DCA.DEFAULT_CONFIG)));
+      state.cfg.strategy = keepStrategy; // 只恢复金额、定投日和规则，不切换策略
       state.startYear = keepYear;
       applyConfig();
     });
@@ -749,9 +876,16 @@
     });
 
     (o.refLines || []).forEach(function (r) {
+      // r.at：标签放在横向哪个位置（0–1，默认最左边）；r.below：标签放在线的下方
       var y = Y(r.y);
       svg("line", { x1: m.left, x2: m.left + pw, y1: y, y2: y, "class": "ref" }, root);
-      var tx = svg("text", { x: m.left + 6, y: y - 5, "class": "ref-label" }, root);
+      var at = r.at == null ? null : Math.max(0, Math.min(1, r.at));
+      var tx = svg("text", {
+        x: at == null ? m.left + 6 : m.left + at * pw,
+        y: r.below ? y + 14 : y - 5,
+        "class": "ref-label",
+        "text-anchor": at == null ? "start" : "middle",
+      }, root);
       tx.textContent = r.label;
     });
 
@@ -761,13 +895,18 @@
         svg("circle", { cx: X(x1), cy: e.y, r: 4, fill: "var(" + e.s.color + ")", "class": "ring" }, root);
       });
       if (o.endLabels && !narrow) {
-        var collide = ends.length > 1 && Math.abs(ends[0].y - ends[1].y) < 16;
-        if (!collide) {
-          ends.forEach(function (e) {
-            var tx = svg("text", { x: m.left + pw + 10, y: e.y, "class": "end-label", "dominant-baseline": "middle" }, root);
-            tx.textContent = e.s.endLabel;
-          });
+        // 末端标签按高低排好，挨得太近就上下错开
+        var GAP = 15;
+        var labels = ends.map(function (e) { return { s: e.s, y: e.y }; }).sort(function (a, b) { return a.y - b.y; });
+        for (var li = 1; li < labels.length; li++) {
+          if (labels[li].y - labels[li - 1].y < GAP) labels[li].y = labels[li - 1].y + GAP;
         }
+        var overflow = labels.length ? labels[labels.length - 1].y - (m.top + ph + 8) : 0;
+        if (overflow > 0) labels.forEach(function (l) { l.y -= overflow; });
+        labels.forEach(function (l) {
+          var tx = svg("text", { x: m.left + pw + 10, y: l.y, "class": "end-label", "dominant-baseline": "middle" }, root);
+          tx.textContent = l.s.endLabel;
+        });
       }
     }
 
@@ -848,11 +987,14 @@
   function renderAll() {
     var s = state.series, cfg = state.cfg;
     cache.dd = DCA.drawdowns(s, cfg.basis);
-    cache.sig = DCA.currentSignal(s, cfg);
+    cache.tl = DCA.trendLines(s, cfg.trend.maWindow);
+    cache.pre = { dd: cache.dd.dd, dev: cache.tl.dev };
+    cache.sig = DCA.currentSignal(s, cfg, { dd: cache.dd, tl: cache.tl });
     renderSignal();
     renderJournal();
     updateTradeHint(false);
     renderDrawdownChart();
+    renderDevChart();
     renderBacktest();
     renderStarts();
     renderFacts();
@@ -865,6 +1007,29 @@
     return segs;
   }
 
+  function rangeLabel(sg) {
+    return sg.max == null ? "跌 ≥" + sg.min + "%" : sg.min === 0 ? "跌不到 " + sg.max + "%" : "跌 " + sg.min + "–" + sg.max + "%";
+  }
+  // 比均线高多少的说法：“比均线高 7.5%” / “就在均线附近”
+  function devPhrase(v, maLabel) {
+    return Math.abs(v) < 0.05 ? "就在" + maLabel + "附近" : "比" + maLabel + (v > 0 ? "高 " : "低 ") + Math.abs(v).toFixed(1) + "%";
+  }
+  // 趋势定投某一天的状态说明，比如“下跌趋势 · 跌 20–30%”
+  function trendStateName(key, ddPct) {
+    var name = DCA.TREND_LABELS[key];
+    if (key !== "down") return name;
+    var tiers = state.cfg.trend.downTiers;
+    var segs = segmentsFor(tiers);
+    var k = DCA.tierIndex(ddPct, tiers);
+    var sg = segs.filter(function (x) { return x.tier === k; })[0];
+    return sg && segs.length > 1 ? name + " · " + rangeLabel(sg) : name;
+  }
+  function multFor(i) {
+    // 按当前策略，第 i 个交易日收盘后算出来的倍数
+    if (isTrend()) return DCA.trendState(cache.dd.dd[i], cache.tl.dev[i], state.cfg.trend).multiplier;
+    return DCA.multiplierFor(cache.dd.dd[i], state.cfg.tiers);
+  }
+
   function renderSignal() {
     var s = state.series, cfg = state.cfg, sig = cache.sig, dd = cache.dd;
     var basisName = cfg.basis === "ath" ? "历史最高点" : "近一年最高点";
@@ -875,14 +1040,57 @@
     var dropText = sig.drawdown < 0.05
       ? "现在就在" + basisName + "附近"
       : "现在比" + basisName + " " + usd2.format(sig.peak) + "（" + cnDate(sig.peakDate) + "）低 " + sig.drawdown.toFixed(1) + "%";
-    $("sigExplain").textContent =
-      "QQQ 最新收盘 " + usd2.format(sig.close) + "（" + cnDate(sig.date) + "），" + dropText +
-      "。按你的规则：" + money(cfg.baseAmount) + " " + times(sig.multiplier) + " = " + money(sig.amount) + "。";
-
-    var segs = segmentsFor(cfg.tiers);
-    var share = DCA.tierShare(dd.dd, cfg.tiers, 0);
+    var ruleText = "。按你的规则：" + money(cfg.baseAmount) + " " + times(sig.multiplier) + " = " + money(sig.amount) + "。";
+    var openBj = isUsDst(sig.nextDate) ? "21:30" : "22:30";
     var ladder = $("ladder");
     ladder.textContent = "";
+
+    if (isTrend()) {
+      var t = cfg.trend;
+      $("sigExplain").textContent =
+        "QQQ 最新收盘 " + usd2.format(sig.close) + "（" + cnDate(sig.date) + "），" + devPhrase(sig.deviation, " " + t.maWindow + " 日均线 " + usd2.format(sig.ma) + " ") +
+        "，" + dropText.replace("现在", "") + "，属于「" + trendStateName(sig.state, sig.drawdown) + "」" + ruleText;
+      var share = DCA.trendShare(dd.dd, cache.tl.dev, t, 0);
+      var downMults = t.downTiers.map(function (x) { return x.multiplier; });
+      if (t.downTiers[0].minDrawdown > 0) downMults.unshift(1);
+      var dMin = Math.min.apply(null, downMults), dMax = Math.max.apply(null, downMults);
+      // 上涨中回调的倍数是 1 时，它和“正常上涨”一样，合成一格
+      var mergeDip = t.dipMultiplier === 1;
+      var curKey = mergeDip && sig.state === "dip" ? "up" : sig.state;
+      if (mergeDip) share = { hot: share.hot, up: share.up + share.dip, dip: 0, down: share.down };
+      var steps = [
+        { key: "hot", mult: times(t.hotMultiplier), range: "比均线高 ≥" + t.hotAbove + "%" },
+        { key: "up", mult: times(1), range: mergeDip ? "均线上方，高不到 " + t.hotAbove + "%" : "均线上方，跌不到 " + t.dipDrawdown + "%" },
+        { key: "dip", mult: times(t.dipMultiplier), range: "均线上方，跌 ≥" + t.dipDrawdown + "%" },
+        { key: "down", mult: dMin === dMax ? times(dMin) : "×" + Number(dMin.toFixed(2)) + "–" + Number(dMax.toFixed(2)), range: "跌破均线，跌越多投越多" },
+      ].filter(function (st) { return !(mergeDip && st.key === "dip"); });
+      ladder.style.setProperty("--n", steps.length);
+      ladder.setAttribute("aria-label", "趋势定投的四种情况");
+      steps.forEach(function (st) {
+        var isCur = st.key === curKey;
+        var step = el("div", "step" + (isCur ? " current" : ""));
+        step.setAttribute("role", "listitem");
+        if (isCur) step.appendChild(el("div", "here", "▼ 现在"));
+        var bar = el("div", "bar");
+        bar.style.background = STATE_COLORS[st.key];
+        step.appendChild(bar);
+        step.appendChild(el("div", "m", st.mult));
+        step.appendChild(el("div", "r", DCA.TREND_LABELS[st.key]));
+        step.appendChild(el("div", "s", st.range));
+        step.appendChild(el("div", "s", "占 " + Math.round(share[st.key] * 100) + "% 的日子"));
+        step.setAttribute("aria-label", DCA.TREND_LABELS[st.key] + "：" + st.range + "，投 " + st.mult + "，历史上占 " + Math.round(share[st.key] * 100) + "% 的交易日" + (isCur ? "，现在是这种情况" : ""));
+        ladder.appendChild(step);
+      });
+      $("sigFoot").textContent =
+        t.maWindow + " 日均线 = 最近 " + t.maWindow + " 个交易日收盘价的平均（" + t.maWindow + " 个交易日大约 " + Math.round(t.maWindow / 21) + " 个月），用来判断是在上涨还是下跌。" +
+        "“占多少日子”按 " + s.dates[0].slice(0, 4) + " 年以来的交易日统计。信号每个交易日收盘后自动更新，定投日前以最新为准；遇美股休市顺延。美股开盘是北京时间 " + openBj + "。";
+      return;
+    }
+
+    $("sigExplain").textContent = "QQQ 最新收盘 " + usd2.format(sig.close) + "（" + cnDate(sig.date) + "），" + dropText + ruleText;
+    ladder.setAttribute("aria-label", "分档");
+    var segs = segmentsFor(cfg.tiers);
+    var tshare = DCA.tierShare(dd.dd, cfg.tiers, 0);
     ladder.style.setProperty("--n", segs.length);
     segs.forEach(function (sg, i) {
       var isCur = sg.tier === sig.tierIndex;
@@ -893,15 +1101,14 @@
       bar.style.background = rampVar(i, segs.length);
       step.appendChild(bar);
       step.appendChild(el("div", "m", times(sg.mult)));
-      var range = sg.max == null ? "跌 ≥" + sg.min + "%" : sg.min === 0 ? "跌不到 " + sg.max + "%" : "跌 " + sg.min + "–" + sg.max + "%";
+      var range = rangeLabel(sg);
       step.appendChild(el("div", "r", range));
-      var sh = sg.tier < 0 ? share.below : share.shares[sg.tier];
+      var sh = sg.tier < 0 ? tshare.below : tshare.shares[sg.tier];
       step.appendChild(el("div", "s", "占 " + Math.round(sh * 100) + "% 的日子"));
       step.setAttribute("aria-label", range + "，投 " + times(sg.mult) + "，历史上占 " + Math.round(sh * 100) + "% 的交易日" + (isCur ? "，现在在这一档" : ""));
       ladder.appendChild(step);
     });
 
-    var openBj = isUsDst(sig.nextDate) ? "21:30" : "22:30";
     $("sigFoot").textContent =
       "“占多少日子”按 " + s.dates[0].slice(0, 4) + " 年以来的交易日统计。信号每个交易日收盘后自动更新，定投日前以最新为准；遇美股休市顺延。" +
       "美股开盘是北京时间 " + openBj + "。";
@@ -922,20 +1129,33 @@
     var s = state.series, cfg = state.cfg, dd = cache.dd;
     var basisName = cfg.basis === "ath" ? "历史最高点" : "近一年最高点";
     $("ddTitle").textContent = "QQQ 离" + basisName + "跌了多少";
-    $("ddSub").textContent = s.dates[0].slice(0, 4) + " 年至今，横线是加码的分界线";
     var idx = weeklySample(s.n, s.day);
     var xs = idx.map(function (i) { return s.day[i]; });
     var dates = idx.map(function (i) { return s.dates[i]; });
     var vals = idx.map(function (i) { return -dd.dd[i]; });
-    var tiers = cfg.tiers;
+    var refs;
+    if (isTrend()) {
+      var t = cfg.trend, lines = {};
+      if (t.dipDrawdown > 0 && t.dipMultiplier !== 1) lines[t.dipDrawdown] = "跌 " + t.dipDrawdown + "%：均线上方算回调 " + times(t.dipMultiplier);
+      t.downTiers.forEach(function (x) {
+        if (x.minDrawdown <= 0) return;
+        var txt = "跌 " + x.minDrawdown + "%：跌破均线时 " + times(x.multiplier);
+        lines[x.minDrawdown] = lines[x.minDrawdown] ? lines[x.minDrawdown] + "，" + txt.replace("跌 " + x.minDrawdown + "%：", "") : txt;
+      });
+      refs = Object.keys(lines).map(function (k) { return { y: -Number(k), label: lines[k] }; });
+      $("ddSub").textContent = s.dates[0].slice(0, 4) + " 年至今。趋势定投还要看价格在均线上面还是下面，见下一张图";
+    } else {
+      refs = cfg.tiers.filter(function (x) { return x.minDrawdown > 0; }).map(function (x) {
+        return { y: -x.minDrawdown, label: "跌 " + x.minDrawdown + "% → " + times(x.multiplier) };
+      });
+      $("ddSub").textContent = s.dates[0].slice(0, 4) + " 年至今，横线是加码的分界线";
+    }
     drawChart($("ddChart"), {
       xs: xs, dates: dates,
       series: [{ color: "--s-qqq", values: vals, area: true }],
       yFormat: function (v) { return v === 0 ? "0" : MINUS + Math.abs(v) + "%"; },
       yCeil: 0,
-      refLines: tiers.filter(function (t) { return t.minDrawdown > 0; }).map(function (t) {
-        return { y: -t.minDrawdown, label: "跌 " + t.minDrawdown + "% → " + times(t.multiplier) };
-      }),
+      refLines: refs,
       markLast: true,
       ariaLabel: "QQQ 回撤历史图，最新回撤 " + dd.dd[s.n - 1].toFixed(1) + "%。可以用左右方向键查看每周数据。",
       tipTitle: function (i) { return cnDate(dates[i]); },
@@ -944,7 +1164,43 @@
         return [
           { color: "--s-qqq", value: dd.dd[j] < 0.05 ? "0%" : MINUS + dd.dd[j].toFixed(1) + "%", label: "离最高点" },
           { color: null, value: usd2.format(s.close[j]), label: "收盘价" },
-          { color: null, value: times(DCA.multiplierFor(dd.dd[j], tiers)), label: "当时的倍数" },
+          { color: null, value: times(multFor(j)), label: "当时的倍数" },
+        ];
+      },
+    });
+  }
+
+  // 趋势定投：价格比均线高（低）多少
+  function renderDevChart() {
+    var card = $("devCard");
+    card.hidden = !isTrend();
+    if (card.hidden) { $("devChart").textContent = ""; return; }
+    var s = state.series, t = state.cfg.trend, tl = cache.tl, dd = cache.dd;
+    $("devTitle").textContent = "QQQ 比 " + t.maWindow + " 日均线高多少";
+    $("devSub").textContent = "0 以下是跌破均线（下跌趋势，加码）；高出 " + t.hotAbove + "% 以上算涨太多（" + times(t.hotMultiplier) + "）。现在" + devPhrase(tl.dev[s.n - 1], "均线");
+    var idx = weeklySample(s.n, s.day);
+    var xs = idx.map(function (i) { return s.day[i]; });
+    var dates = idx.map(function (i) { return s.dates[i]; });
+    var vals = idx.map(function (i) { return tl.dev[i]; });
+    function signed(v) { return v === 0 ? "0" : (v > 0 ? "+" : MINUS) + Math.abs(v) + "%"; }
+    drawChart($("devChart"), {
+      xs: xs, dates: dates,
+      series: [{ color: "--s-qqq", values: vals, area: true }],
+      yFormat: signed,
+      refLines: [
+        { y: t.hotAbove, label: "高 " + t.hotAbove + "%：涨太多 " + times(t.hotMultiplier), at: 0.5 },
+        { y: 0, label: "均线：跌破就是下跌趋势", at: 0.5, below: true },
+      ],
+      markLast: true,
+      ariaLabel: "QQQ 相对 " + t.maWindow + " 日均线的偏离历史图，最新" + devPhrase(tl.dev[s.n - 1], "均线") + "。可以用左右方向键查看每周数据。",
+      tipTitle: function (i) { return cnDate(dates[i]); },
+      tipRows: function (i) {
+        var j = idx[i];
+        var st = DCA.trendState(dd.dd[j], tl.dev[j], t);
+        return [
+          { color: "--s-qqq", value: (tl.dev[j] >= 0 ? "+" : MINUS) + Math.abs(tl.dev[j]).toFixed(1) + "%", label: "比均线" },
+          { color: null, value: usd2.format(s.close[j]), label: "收盘价 · 均线 " + usd2.format(tl.ma[j]) },
+          { color: null, value: times(st.multiplier), label: trendStateName(st.key, dd.dd[j]) },
         ];
       },
     });
@@ -969,156 +1225,203 @@
 
   function renderBacktest() {
     var s = state.series, cfg = state.cfg;
-    var dd = cache.dd;
+    var pre = cache.pre;
     var start = state.startYear + "-01-01";
-    var p = DCA.backtest(s, cfg, { plain: true, startDate: start, dd: dd.dd });
-    var t = DCA.backtest(s, cfg, { startDate: start, dd: dd.dd });
-    if (!p || !t) return;
-    cache.plain = p; cache.tiered = t;
+    var p = DCA.backtest(s, cfg, { strategy: "plain", startDate: start, dd: pre.dd });
+    var t = DCA.backtest(s, cfg, { strategy: "tiered", startDate: start, dd: pre.dd });
+    var tr = DCA.backtest(s, cfg, { strategy: "trend", startDate: start, dd: pre.dd, dev: pre.dev });
+    if (!p || !t || !tr) return;
+    cache.plain = p; cache.tiered = t; cache.trend = tr;
+    var cur = isTrend() ? tr : t, other = isTrend() ? t : tr;
 
-    // 结论
-    var diff = (t.xirr - p.xirr) * 100;
-    var cmp = diff >= 0.05 ? "高 " + diff.toFixed(2) + " 个百分点" : diff <= -0.05 ? "低 " + (-diff).toFixed(2) + " 个百分点" : "几乎一样";
+    // 结论：先说当前策略，再和另一个策略比一句
+    function cmpText(a, b) {
+      var diff = (a.xirr - b.xirr) * 100;
+      return diff >= 0.05 ? "高 " + diff.toFixed(2) + " 个百分点" : diff <= -0.05 ? "低 " + (-diff).toFixed(2) + " 个百分点" : "几乎一样";
+    }
+    function moneyText(r) {
+      var ratio = r.invested / p.invested - 1;
+      return Math.abs(ratio) < 0.005 ? "总投入和普通定投差不多" : "总共" + (ratio > 0 ? "多投了 " : "少投了 ") + pct(Math.abs(ratio), 0) + " 的钱";
+    }
     var v = $("verdict");
     v.textContent = "";
-    v.appendChild(document.createTextNode("从 " + cnDate(t.startDate) + " 开始：跌多多投的年化收益率 "));
-    v.appendChild(el("b", null, pct(t.xirr, 2)));
+    v.appendChild(document.createTextNode("从 " + cnDate(cur.startDate) + " 开始：" + strategyName() + "的年化收益率 "));
+    v.appendChild(el("b", null, pct(cur.xirr, 2)));
     v.appendChild(document.createTextNode("，普通定投 "));
     v.appendChild(el("b", null, pct(p.xirr, 2)));
-    v.appendChild(document.createTextNode("，" + cmp + "。"));
-    if (t.invested > p.invested) {
+    v.appendChild(document.createTextNode("，" + cmpText(cur, p) + "。"));
+    if (isTrend()) {
       v.appendChild(document.createTextNode(
-        "代价是总共多投了 " + pct(t.invested / p.invested - 1, 0) + " 的钱，单周最多要投 " + money(t.maxAmount) +
-        "，最长连续 " + t.longestStreak + " 周都在加码。"
+        moneyText(cur) + "：涨太多时少投了 " + cur.trimmedWeeks + " 周，加码了 " + cur.boostedWeeks + " 周，单周最多要投 " + money(cur.maxAmount) +
+        (cur.longestStreak ? "，最长连续 " + cur.longestStreak + " 周都在加码。" : "。")
+      ));
+    } else if (cur.invested > p.invested) {
+      v.appendChild(document.createTextNode(
+        "代价是" + moneyText(cur) + "，单周最多要投 " + money(cur.maxAmount) + "，最长连续 " + cur.longestStreak + " 周都在加码。"
       ));
     } else {
       v.appendChild(document.createTextNode("这段时间几乎没有触发加码，两种方式投的钱差不多。"));
     }
+    v.appendChild(document.createTextNode("同一时期" + strategyName(other.strategy) + "年化 " + pct(other.xirr, 2) + "，" + moneyText(other) + "。"));
 
     // 对比表
     var tb = $("cmpTable").tBodies[0];
     tb.textContent = "";
-    function row(label, a, b, opts) {
+    function row(label, cells, opts) {
       opts = opts || {};
       var tr = el("tr", opts.em ? "em" : "");
       tr.appendChild(el("td", "label", label));
-      [a, b].forEach(function (cell) {
+      cells.forEach(function (cell) {
         var td = el("td");
-        if (Array.isArray(cell)) { td.appendChild(document.createTextNode(cell[0])); td.appendChild(el("span", "note", cell[1])); }
+        if (Array.isArray(cell)) { td.appendChild(document.createTextNode(cell[0])); if (cell[1]) td.appendChild(el("span", "note", cell[1])); }
         else td.textContent = cell;
         tr.appendChild(td);
       });
       tb.appendChild(tr);
     }
-    row("定投了几周", p.weeks + " 周", t.weeks + " 周");
-    row("总共投入", money(p.invested), money(t.invested));
-    row("现在市值", money(p.finalValue), money(t.finalValue));
-    row("赚了", signedMoney(p.profit), signedMoney(t.profit));
-    row("总收益率", pct(p.totalReturn, 1, true), pct(t.totalReturn, 1, true));
-    row("年化收益率（XIRR）", pct(p.xirr, 2), pct(t.xirr, 2), { em: true });
-    row("平均买入价", usd2.format(p.avgCost), usd2.format(t.avgCost));
-    row("单周最多投入", money(p.maxAmount), [money(t.maxAmount), t.maxAmountDate ? shortDate(t.maxAmountDate) : ""]);
-    row("加码的周数", "0 周", [t.boostedWeeks + " 周", "占 " + pct(t.boostedWeeks / t.weeks, 0)]);
-    row("最长连续加码", "—", t.longestStreak ? [t.longestStreak + " 周", shortDate(t.longestStreakStart) + " – " + shortDate(t.longestStreakEnd)] : "0 周");
-    row("最惨的时候浮亏", [pct(p.worstReturn, 1, true), p.worstDate ? shortDate(p.worstDate) : ""], [pct(t.worstReturn, 1, true), t.worstDate ? shortDate(t.worstDate) : ""]);
+    var all = [p, t, tr];
+    function each(fn) { return all.map(fn); }
+    row("定投了几周", each(function (r) { return r.weeks + " 周"; }));
+    row("总共投入", each(function (r) { return r === p ? money(r.invested) : [money(r.invested), "是普通的 " + (r.invested / p.invested).toFixed(2) + " 倍"]; }));
+    row("现在市值", each(function (r) { return money(r.finalValue); }));
+    row("赚了", each(function (r) { return signedMoney(r.profit); }));
+    row("总收益率", each(function (r) { return pct(r.totalReturn, 1, true); }));
+    row("年化收益率（XIRR）", each(function (r) { return pct(r.xirr, 2); }), { em: true });
+    row("平均买入价", each(function (r) { return usd2.format(r.avgCost); }));
+    row("单周最多投入", each(function (r) { return r === p ? money(r.maxAmount) : [money(r.maxAmount), r.maxAmountDate ? shortDate(r.maxAmountDate) : ""]; }));
+    row("加码的周数", each(function (r) { return r === p ? "0 周" : [r.boostedWeeks + " 周", "占 " + pct(r.boostedWeeks / r.weeks, 0)]; }));
+    row("少投的周数", each(function (r) { return r.trimmedWeeks ? [r.trimmedWeeks + " 周", "少投 " + money(r.trimmedTotal)] : "0 周"; }));
+    row("最长连续加码", each(function (r) {
+      if (r === p) return "—";
+      return r.longestStreak ? [r.longestStreak + " 周", shortDate(r.longestStreakStart) + " – " + shortDate(r.longestStreakEnd)] : "0 周";
+    }));
+    row("最惨的时候浮亏", each(function (r) { return [pct(r.worstReturn, 1, true), r.worstDate ? shortDate(r.worstDate) : ""]; }));
 
     renderBacktestCharts();
     renderYearTable();
   }
 
   function renderBacktestCharts() {
-    var p = cache.plain, t = cache.tiered, cfg = state.cfg;
-    if (!p || !t) return;
+    var p = cache.plain, t = cache.tiered, tr = cache.trend, cfg = state.cfg;
+    if (!p || !t || !tr) return;
     var xs = t.curve.map(function (c) { return DCA.dayNumber(c.date); });
     var dates = t.curve.map(function (c) { return c.date; });
-    var rp = p.curve.map(function (c) { return c.value / c.invested - 1; });
-    var rt = t.curve.map(function (c) { return c.value / c.invested - 1; });
+    function returns(r) { return r.curve.map(function (c) { return c.value / c.invested - 1; }); }
+    var rp = returns(p), rt = returns(t), rr = returns(tr);
     drawChart($("retChart"), {
       xs: xs, dates: dates,
       series: [
         { color: "--s-plain", values: rp, endLabel: "普通 " + pct(rp[rp.length - 1], 0, true) },
         { color: "--s-tiered", values: rt, endLabel: "跌多多投 " + pct(rt[rt.length - 1], 0, true) },
+        { color: "--s-trend", values: rr, endLabel: "趋势定投 " + pct(rr[rr.length - 1], 0, true) },
       ],
       yFormat: function (v) { return pct(v, 0, true); },
       yFloor: 0,
       endLabels: true,
-      ariaLabel: "两种定投的账户收益率走势。可以用左右方向键查看每周数据，完整数字见每年数据表。",
+      ariaLabel: "三种定投的账户收益率走势。可以用左右方向键查看每周数据，完整数字见每年数据表。",
       tipTitle: function (i) { return cnDate(dates[i]); },
       tipRows: function (i) {
         return [
           { color: "--s-plain", value: pct(rp[i], 1, true), label: "普通定投 · 已投 " + money(p.curve[i].invested) },
           { color: "--s-tiered", value: pct(rt[i], 1, true), label: "跌多多投 · 已投 " + money(t.curve[i].invested) },
+          { color: "--s-trend", value: pct(rr[i], 1, true), label: "趋势定投 · 已投 " + money(tr.curve[i].invested) },
         ];
       },
     });
 
-    var weeks = t.curve.filter(function (c) { return !c.final; });
+    var cur = isTrend() ? tr : t;
+    var color = isTrend() ? "--s-trend" : "--s-tiered";
+    var weeks = cur.curve.filter(function (c) { return !c.final; });
     var axs = weeks.map(function (c) { return DCA.dayNumber(c.date); });
     var adates = weeks.map(function (c) { return c.date; });
     var amts = weeks.map(function (c) { return c.amount; });
-    $("amtSub").textContent = "横线是每周基础金额 " + money(cfg.baseAmount) + "，高出来的部分就是加码";
+    $("amtTitle").textContent = strategyName() + "：每周实际投入";
+    $("amtSub").textContent = isTrend()
+      ? "横线是每周基础金额 " + money(cfg.baseAmount) + "：高出来的是加码，低下去的是涨太多时少投"
+      : "横线是每周基础金额 " + money(cfg.baseAmount) + "，高出来的部分就是加码";
     drawChart($("amtChart"), {
       xs: axs, dates: adates,
       height: 180,
-      series: [{ color: "--s-tiered", values: amts, area: true, step: true }],
+      series: [{ color: color, values: amts, area: true, step: true }],
       yFormat: function (v) { return v === 0 ? "$0" : money(v); },
       yFloor: 0,
       refLines: [{ y: cfg.baseAmount, label: "基础金额" }],
-      ariaLabel: "跌多多投每周投入金额。最多一周 " + money(t.maxAmount) + "。",
+      ariaLabel: strategyName() + "每周投入金额。最多一周 " + money(cur.maxAmount) + "。",
       tipTitle: function (i) { return cnDate(adates[i], true); },
       tipRows: function (i) {
-        return [
-          { color: "--s-tiered", value: money(amts[i]), label: "这周投入" },
-          { color: null, value: times(weeks[i].multiplier), label: "倍数" },
-          { color: null, value: weeks[i].drawdown < 0.05 ? "0%" : MINUS + weeks[i].drawdown.toFixed(1) + "%", label: "前一天回撤" },
+        var w = weeks[i];
+        var rows = [
+          { color: color, value: money(amts[i]), label: "这周投入" },
+          { color: null, value: times(w.multiplier), label: w.state ? trendStateName(w.state, w.drawdown) : "倍数" },
+          { color: null, value: w.drawdown < 0.05 ? "0%" : MINUS + w.drawdown.toFixed(1) + "%", label: "前一天回撤" },
         ];
+        if (w.deviation != null) rows.push({ color: null, value: (w.deviation >= 0 ? "+" : MINUS) + Math.abs(w.deviation).toFixed(1) + "%", label: "前一天比均线" });
+        return rows;
       },
     });
   }
 
   function renderYearTable() {
-    var s = state.series, p = cache.plain, t = cache.tiered;
-    var rows = DCA.yearly(s, cache.dd.dd, p.curve, t.curve).reverse();
+    var s = state.series;
+    var rows = DCA.yearly(s, cache.dd.dd, cache.plain.curve, cache.tiered.curve, cache.trend.curve).reverse();
     var tb = $("yearTable").tBodies[0];
     tb.textContent = "";
     rows.forEach(function (r) {
-      var tr = el("tr");
+      var row = el("tr");
       var yearCell = el("td", null, String(r.year));
       if (r.partial) yearCell.appendChild(el("span", "note", r.year === +s.dates[s.n - 1].slice(0, 4) ? "截至 " + shortDate(s.dates[s.n - 1]) : "不满一年"));
-      tr.appendChild(yearCell);
-      tr.appendChild(el("td", null, usd2.format(r.close)));
-      tr.appendChild(el("td", null, pct(r.change, 1, true)));
-      tr.appendChild(el("td", null, r.maxDrawdown < 0.05 ? "0%" : MINUS + r.maxDrawdown.toFixed(1) + "%"));
-      tr.appendChild(el("td", null, r.plainReturn == null ? "—" : pct(r.plainReturn, 1, true)));
-      tr.appendChild(el("td", null, r.tieredReturn == null ? "—" : pct(r.tieredReturn, 1, true)));
-      tb.appendChild(tr);
+      row.appendChild(yearCell);
+      row.appendChild(el("td", null, usd2.format(r.close)));
+      row.appendChild(el("td", null, pct(r.change, 1, true)));
+      row.appendChild(el("td", null, r.maxDrawdown < 0.05 ? "0%" : MINUS + r.maxDrawdown.toFixed(1) + "%"));
+      [r.plainReturn, r.tieredReturn, r.trendReturn].forEach(function (v) {
+        row.appendChild(el("td", null, v == null ? "—" : pct(v, 1, true)));
+      });
+      tb.appendChild(row);
     });
   }
 
   function renderStarts() {
     var s = state.series, cfg = state.cfg;
-    var rows = DCA.compareStarts(s, cfg, START_YEARS);
+    var rows = DCA.compareStarts(s, cfg, START_YEARS, cache.pre);
     cache.starts = rows;
     var tb = $("startsTable").tBodies[0];
     tb.textContent = "";
-    var wins = 0, losses = 0, maxAbs = 0;
+    var stat = {
+      tiered: { wins: 0, losses: 0, extra: 0 },
+      trend: { wins: 0, losses: 0, extra: 0 },
+    };
+    function diffText(d) { return Math.abs(d) < 0.005 ? "和普通一样" : (d > 0 ? "+" : MINUS) + Math.abs(d).toFixed(2) + " 个点"; }
+    function cell(main, note) {
+      var td = el("td", null, main);
+      td.appendChild(el("span", "note", note));
+      return td;
+    }
     rows.forEach(function (r) {
-      var d = r.xirrDiff * 100;
-      if (d >= 0.05) wins++; else if (d <= -0.05) losses++;
-      maxAbs = Math.max(maxAbs, Math.abs(d));
-      var tr = el("tr");
-      tr.appendChild(el("td", null, r.year + " 年"));
-      tr.appendChild(el("td", null, pct(r.plain.xirr, 2)));
-      tr.appendChild(el("td", null, pct(r.tiered.xirr, 2)));
-      tr.appendChild(el("td", null, Math.abs(d) < 0.005 ? "0" : (d > 0 ? "+" : MINUS) + Math.abs(d).toFixed(2) + " 个点"));
-      tr.appendChild(el("td", null, pct(r.investedRatio - 1, 0)));
-      tr.appendChild(el("td", null, r.tiered.longestStreak + " 周"));
-      tb.appendChild(tr);
+      var dT = r.xirrDiff * 100, dR = r.trendXirrDiff * 100;
+      if (dT >= 0.05) stat.tiered.wins++; else if (dT <= -0.05) stat.tiered.losses++;
+      if (dR >= 0.05) stat.trend.wins++; else if (dR <= -0.05) stat.trend.losses++;
+      stat.tiered.extra += r.investedRatio - 1;
+      stat.trend.extra += r.trendInvestedRatio - 1;
+      var row = el("tr");
+      row.appendChild(el("td", null, r.year + " 年"));
+      row.appendChild(el("td", null, pct(r.plain.xirr, 2)));
+      row.appendChild(cell(pct(r.tiered.xirr, 2), diffText(dT)));
+      row.appendChild(cell(pct(r.trend.xirr, 2), diffText(dR)));
+      row.appendChild(cell(pct(r.investedRatio - 1, 0, true), "连续加码 " + r.tiered.longestStreak + " 周"));
+      row.appendChild(cell(pct(r.trendInvestedRatio - 1, 0, true), "连续加码 " + r.trend.longestStreak + " 周"));
+      tb.appendChild(row);
     });
-    var even = rows.length - wins - losses;
+    function summary(key) {
+      var st = stat[key], even = rows.length - st.wins - st.losses;
+      var avg = st.extra / rows.length;
+      return strategyName(key) + " " + st.wins + " 次更高、" + st.losses + " 次更低" + (even ? "、" + even + " 次几乎一样" : "") +
+        "，平均" + (avg >= 0 ? "多投 " : "少投 ") + pct(Math.abs(avg), 0) + " 的钱";
+    }
+    var order = isTrend() ? ["trend", "tiered"] : ["tiered", "trend"];
     $("startsVerdict").textContent = rows.length
-      ? "试了 " + rows.length + " 个不同的开始年份：跌多多投的年化收益率 " + wins + " 次更高、" + losses + " 次更低" +
-        (even ? "、" + even + " 次几乎一样" : "") + "，差距最大 " + maxAbs.toFixed(2) + " 个百分点。开始时间不同，结论可能不一样，这很正常。"
+      ? "试了 " + rows.length + " 个不同的开始年份，年化收益率和普通定投比：" + summary(order[0]) + "；" + summary(order[1]) +
+        "。开始时间不同，结论可能不一样，这很正常。"
       : "数据还不够长，暂时没法比较不同开始年份。";
   }
 
@@ -1132,22 +1435,44 @@
       li.appendChild(el("span", null, text));
       ul.appendChild(li);
     }
-    fact("它不是预测", "规则只看“已经跌了多少”，不知道明天会涨还是会跌。跌了 20% 之后，还可能继续跌。");
+    var trend = isTrend(), t = cfg.trend;
+    if (trend) {
+      fact("它不是预测", "规则只看价格现在在 " + t.maWindow + " 日均线上面还是下面、离最高点跌了多少，不知道明天会涨还是会跌。跌破均线之后可能继续跌很久，涨太多之后也可能继续涨。");
+      var share = DCA.trendShare(cache.dd.dd, cache.tl.dev, t, 0);
+      fact("一直上涨时：不停投，只是少投",
+        "价格比均线高 " + t.hotAbove + "% 以上时投 " + times(t.hotMultiplier) + "，其他上涨的时候照常 ×1，" + (t.hotMultiplier > 0 ? "不会停投。" : "（你把倍数设成了 0，这时会暂停不投）。") +
+        s.dates[0].slice(0, 4) + " 年以来约 " + Math.round(share.hot * 100) + "% 的交易日属于“涨太多”。少投能省下一点钱留给下跌时加码；但如果之后继续大涨，少投的部分就少赚了。");
+    } else {
+      fact("它不是预测", "规则只看“已经跌了多少”，不知道明天会涨还是会跌。跌了 20% 之后，还可能继续跌。");
+    }
 
-    var full = DCA.backtest(s, cfg, { dd: cache.dd.dd });
+    var full = DCA.backtest(s, cfg, { strategy: cfg.strategy, dd: cache.dd.dd, dev: cache.tl.dev });
     if (full) {
       fact("加码要准备备用金",
         "用现在的设置，如果从 " + cnDate(full.startDate) + " 就开始，单周最多要投 " + money(full.maxAmount) +
         "，最长连续 " + full.longestStreak + " 周在加码，总投入是普通定投的 " + (full.invested / (cfg.baseAmount * full.weeks)).toFixed(2) +
         " 倍。先确认自己拿得出这笔钱，否则真跌下来的时候规则执行不了。");
+      fact("多投的钱从哪来很重要",
+        "回测里加码规则的年化更高，主要是因为下跌时多投了钱。如果总共能投的钱一样多、没用完的钱先留着等下跌，历史上每周按时全部投进去反而更好。所以加码用的钱最好是本来不会拿去投资的钱（比如备用的奖金）。");
+    }
+    if (trend) {
+      fact("均线会慢半拍",
+        t.maWindow + " 日均线要好几个月才会转向：刚开始大跌时，价格可能还在均线上方，" +
+        (t.dipMultiplier > 1 ? "只按“上涨中回调”多投一点" : "照常投，不会马上加码") + "；反弹初期价格还在均线下方，会继续加码。");
     }
     var u = DCA.longestUnderwater(s);
     if (u) {
       var yrs = (u.days / 365.25).toFixed(1);
+      var basisNote;
+      if (cfg.basis !== "ath") basisNote = "按“近一年最高点”算，一年后高点会被“忘掉”，加码会停下来。";
+      else if (trend) basisNote = t.dipMultiplier > 1
+        ? "按“历史最高点”算，这段时间价格回到均线上方、但还没回到高点时，会一直按“上涨中回调”多投（涨太多的时候除外）。"
+        : "按“历史最高点”算，这段时间离高点一直很远，只要跌破均线就会按最高一档加码。";
+      else basisNote = "按“历史最高点”算，这段时间会一直处在加码状态。";
       fact("跌下去可能很久才回来",
         "QQQ 历史上最长的一次：" + cnDate(u.peakDate) + " 见顶，最多跌了 " + u.maxDrawdown.toFixed(0) + "%，" +
         (u.recoveryDate ? "到 " + cnDate(u.recoveryDate) + " 才回到那个高点，前后约 " + yrs + " 年。" : "到现在还没回到那个高点（已经约 " + yrs + " 年）。") +
-        (cfg.basis === "ath" ? "按“历史最高点”算，这段时间会一直处在加码状态。" : "按“近一年最高点”算，一年后高点会被“忘掉”，加码会停下来。"));
+        basisNote);
     }
     fact("回测没算的东西", "没有算券商手续费、美股分红税、人民币汇率变化，假设可以买零碎股、分红自动再投资。过去的表现不代表未来。");
     fact("下单时间", "美股常规交易时间：北京时间 21:30 – 次日 04:00（夏令时，约 3 月中到 11 月初），冬令时是 22:30 – 次日 05:00。");
@@ -1188,14 +1513,17 @@
   function updateTradeHint(fill) {
     if (!state.series) return;
     var ds = $("tDate").value;
-    var sug = ds ? DCA.suggestionForDate(state.series, state.cfg, ds, cache.dd.dd) : null;
+    var sug = ds ? DCA.suggestionForDate(state.series, state.cfg, ds, cache.pre) : null;
     if (!sug) {
       $("tHint").textContent = ds ? "这个日期比行情数据还早，没法算规则建议。" : "";
       return;
     }
+    var why = sug.state
+      ? strategyName() + "：按 " + cnDate(sug.basedOn) + " 收盘价，" + devPhrase(sug.deviation, "均线") + "、离最高点跌 " + sug.drawdown.toFixed(1) + "%，属于「" + trendStateName(sug.state, sug.drawdown) + "」"
+      : "按 " + cnDate(sug.basedOn) + " 收盘价离最高点跌 " + sug.drawdown.toFixed(1) + "%";
     $("tHint").textContent =
-      "规则建议这天投 " + money(sug.amount) + "（" + times(sug.multiplier) + "，按 " + cnDate(sug.basedOn) + " 收盘价离最高点跌 " +
-      sug.drawdown.toFixed(1) + "%）。" + (sug.closeOnDate != null ? "当天收盘价 " + usd2.format(sug.closeOnDate) + "，" : "") +
+      "规则建议这天投 " + money(sug.amount) + "（" + times(sug.multiplier) + "，" + why + "）。" +
+      (sug.closeOnDate != null ? "当天收盘价 " + usd2.format(sug.closeOnDate) + "，" : "") +
       "成交价请填你实际买到的价格。";
     if (fill) {
       var price = sug.closeOnDate != null ? sug.closeOnDate : sug.latestClose;
@@ -1212,6 +1540,7 @@
     $("tTableWrap").hidden = !has;
     $("tTiles").hidden = !has;
     $("tExport").disabled = !has;
+    $("tMail").disabled = !has;
 
     var tiles = $("tTiles");
     tiles.textContent = "";
@@ -1244,7 +1573,7 @@
       if (r.suggested == null) sugCell.textContent = "—";
       else {
         sugCell.appendChild(document.createTextNode(money(r.suggested) + " " + times(r.multiplier)));
-        sugCell.appendChild(el("span", "note", "跌 " + r.drawdown.toFixed(1) + "%"));
+        sugCell.appendChild(el("span", "note", r.state ? DCA.TREND_LABELS[r.state] : "跌 " + r.drawdown.toFixed(1) + "%"));
       }
       tr.appendChild(sugCell);
       var diffText = "—";
@@ -1316,28 +1645,75 @@
       if (!f) return;
       f.text()
         .then(function (text) {
-          var obj = JSON.parse(text);
-          var list = Array.isArray(obj) ? obj : obj && obj.trades;
-          if (!Array.isArray(list)) throw new Error("文件里没有找到买入记录");
-          var seen = {};
-          trades.forEach(function (t) { seen[tradeKey(t)] = true; });
-          var added = 0, skipped = 0;
-          list.forEach(function (raw) {
-            var t = cleanTrade(raw || {});
-            if (!validTrade(t) || seen[tradeKey(t)]) { skipped++; return; }
-            seen[tradeKey(t)] = true;
-            trades.push(t);
-            added++;
-          });
-          saveTrades();
-          renderJournal();
-          $("tMsg").textContent = "导入完成：新增 " + added + " 笔" + (skipped ? "，跳过 " + skipped + " 笔（重复或格式不对）" : "") + "。";
+          $("tMsg").textContent = importMessage(importTrades(DCA.parseTradesBackup(text)));
         })
         .catch(function (err) {
           $("tMsg").textContent = "导入失败：" + err.message + "。请选择之前用“导出备份”保存的 .json 文件。";
         })
         .then(function () { $("tImport").value = ""; });
     });
+
+    // 发到邮箱：打开邮件 App，收件人、标题、正文都填好，点发送就完成备份
+    var EMAIL_KEY = "nasdaq100-dca-backup-email";
+    try { $("tEmail").value = localStorage.getItem(EMAIL_KEY) || ""; } catch (e) { /* 存不了就每次手动填 */ }
+    function saveEmail() {
+      try { localStorage.setItem(EMAIL_KEY, $("tEmail").value.trim()); } catch (e) { /* 忽略 */ }
+    }
+    $("tEmail").addEventListener("change", saveEmail);
+    $("tMail").addEventListener("click", function () {
+      var to = $("tEmail").value.trim();
+      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(to)) {
+        $("tMsg").textContent = "先在“备份邮箱”里填好你的邮箱地址。";
+        $("tEmail").focus();
+        return;
+      }
+      saveEmail();
+      var b = DCA.formatTradesBackup(trades, { today: todayNewYork(), siteUrl: location.origin + location.pathname });
+      var url = "mailto:" + to + "?subject=" + encodeURIComponent(b.subject) + "&body=" + encodeURIComponent(b.body);
+      window.location.href = url;
+      $("tMsg").textContent =
+        "已经打开邮件 App：收件人 " + to + "，共 " + b.count + " 笔，点发送就备份好了。" +
+        (url.length > 2000 ? "记录比较多，如果邮件正文不完整，请改用“导出备份”保存文件。" : "") +
+        "如果没有弹出邮件 App，说明这台设备没设置默认邮件应用，可以用“导出备份”。";
+    });
+
+    // 粘贴导入：把备份邮件里的内容粘贴回来
+    $("tPasteBtn").addEventListener("click", function () {
+      var box = $("tPasteBox");
+      box.hidden = !box.hidden;
+      $("tPasteBtn").setAttribute("aria-expanded", String(!box.hidden));
+      if (!box.hidden) $("tPaste").focus();
+    });
+    $("tPasteImport").addEventListener("click", function () {
+      try {
+        var r = importTrades(DCA.parseTradesBackup($("tPaste").value));
+        $("tPaste").value = "";
+        $("tPasteBox").hidden = true;
+        $("tPasteBtn").setAttribute("aria-expanded", "false");
+        $("tMsg").textContent = importMessage(r);
+      } catch (err) {
+        $("tMsg").textContent = "导入失败：" + err.message + "。请把备份邮件里两条横线之间的内容完整粘贴进来。";
+      }
+    });
+  }
+
+  function importTrades(list) {
+    var seen = {};
+    trades.forEach(function (t) { seen[tradeKey(t)] = true; });
+    var added = 0, skipped = 0;
+    list.forEach(function (raw) {
+      var t = cleanTrade(raw || {});
+      if (!validTrade(t) || seen[tradeKey(t)]) { skipped++; return; }
+      seen[tradeKey(t)] = true;
+      trades.push(t);
+      added++;
+    });
+    saveTrades();
+    renderJournal();
+    return { added: added, skipped: skipped };
+  }
+  function importMessage(r) {
+    return "导入完成：新增 " + r.added + " 笔" + (r.skipped ? "，跳过 " + r.skipped + " 笔（重复或格式不对）" : "") + "。";
   }
 
   // ================= 启动 =================
@@ -1378,7 +1754,7 @@
       if (w === lastW) return;
       lastW = w;
       clearTimeout(timer);
-      timer = setTimeout(function () { renderDrawdownChart(); renderBacktestCharts(); }, 120);
+      timer = setTimeout(function () { renderDrawdownChart(); renderDevChart(); renderBacktestCharts(); }, 120);
     });
     ro.observe($("app"));
   }
