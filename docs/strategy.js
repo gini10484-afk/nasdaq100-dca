@@ -395,6 +395,104 @@
     return best;
   }
 
+  // ---------- 我的买入记录 ----------
+  // 某天买入时，按规则应该投多少：用那天之前最近一个交易日的收盘价算回撤
+  function suggestionForDate(series, config, dateStr, dd) {
+    var cfg = withDefaults(config);
+    var n = series.n;
+    if (!n || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr))) return null;
+    var target = dayNumber(dateStr);
+    var lo = 0, hi = n;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (series.day[mid] < target) lo = mid + 1;
+      else hi = mid;
+    }
+    // lo = 当天或之后的第一个交易日；超出数据范围说明是最新数据之后的日子
+    var prevIdx = lo < n ? lo - 1 : n - 1;
+    if (prevIdx < 0) return null;
+    var ddArr = dd || drawdowns(series, cfg.basis).dd;
+    var mult = multiplierFor(ddArr[prevIdx], cfg.tiers);
+    var sameDay = lo < n && series.day[lo] === target;
+    return {
+      date: dateStr,
+      basedOn: series.dates[prevIdx],
+      drawdown: ddArr[prevIdx],
+      multiplier: mult,
+      amount: cfg.baseAmount * mult,
+      closeOnDate: sameDay ? series.close[lo] : null,
+      latestClose: series.close[n - 1],
+    };
+  }
+
+  // 汇总实际买入记录：和规则建议比，算持仓、市值、平均成本
+  // trades: [{ id, date: "YYYY-MM-DD", amount: 实际投入美元, price: 成交价, note }]
+  function summarizeTrades(series, config, trades) {
+    var cfg = withDefaults(config);
+    var n = series.n;
+    var dd = n ? drawdowns(series, cfg.basis).dd : [];
+    var list = (trades || [])
+      .filter(function (t) {
+        return t && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) && Number(t.amount) > 0 && Number(t.price) > 0;
+      })
+      .slice()
+      .sort(function (a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      });
+    var invested = 0, shares = 0, suggestedTotal = 0, followed = 0, compared = 0;
+    var flows = [];
+    var rows = list.map(function (t) {
+      var amount = Number(t.amount), price = Number(t.price);
+      var sug = n ? suggestionForDate(series, cfg, t.date, dd) : null;
+      var sh = amount / price;
+      invested += amount;
+      shares += sh;
+      flows.push([dayNumber(t.date), amount]);
+      var diff = null;
+      if (sug) {
+        compared++;
+        suggestedTotal += sug.amount;
+        diff = amount - sug.amount;
+        // 差额在 5%（至少 1 美元）以内，算“按规则执行”
+        if (Math.abs(diff) <= Math.max(1, sug.amount * 0.05)) followed++;
+      }
+      return {
+        id: t.id,
+        date: t.date,
+        amount: amount,
+        price: price,
+        shares: sh,
+        note: t.note || "",
+        suggested: sug ? sug.amount : null,
+        multiplier: sug ? sug.multiplier : null,
+        drawdown: sug ? sug.drawdown : null,
+        basedOn: sug ? sug.basedOn : null,
+        diff: diff,
+      };
+    });
+    var lastClose = n ? series.close[n - 1] : NaN;
+    var value = shares * lastClose;
+    var firstDay = flows.length ? flows[0][0] : null;
+    var endDay = n ? Math.max(series.day[n - 1], flows.length ? flows[flows.length - 1][0] : 0) : null;
+    return {
+      rows: rows,
+      count: rows.length,
+      invested: invested,
+      shares: shares,
+      lastClose: lastClose,
+      lastDate: n ? series.dates[n - 1] : null,
+      value: value,
+      profit: value - invested,
+      totalReturn: invested > 0 ? value / invested - 1 : 0,
+      avgCost: shares > 0 ? invested / shares : NaN,
+      suggestedTotal: suggestedTotal,
+      compared: compared,
+      followed: followed,
+      spanDays: firstDay != null && endDay != null ? endDay - firstDay : 0,
+      xirr: flows.length && value > 0 ? xirr(flows, value, endDay) : NaN,
+    };
+  }
+
   // 按年汇总：年末收盘价、当年涨跌（含分红）、当年最深回撤、两种定投年末的累计收益率
   function yearly(series, dd, plainCurve, tieredCurve) {
     var out = [], byYear = {}, order = [];
@@ -450,6 +548,8 @@
     compareStarts: compareStarts,
     tierShare: tierShare,
     longestUnderwater: longestUnderwater,
+    suggestionForDate: suggestionForDate,
+    summarizeTrades: summarizeTrades,
     yearly: yearly,
   };
 });
