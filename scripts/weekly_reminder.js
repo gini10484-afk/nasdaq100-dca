@@ -3,7 +3,7 @@
  * 由 .github/workflows/weekly-reminder.yml 每个工作日北京时间 20:00 调用；
  * 只有“今天是定投日”才会真的发提醒（可以用 --force 强制发一条测试提醒）。
  *
- * 提醒按 docs/strategy.js 里的 DEFAULT_CONFIG 计算。
+ * 提醒按 docs/strategy.js 里的 DEFAULT_CONFIG 计算（DEFAULT_CONFIG.strategy 决定按哪个策略提醒，另一个策略的金额也会附在后面）。
  * 你在网页上改的设置只保存在自己的浏览器里，GitHub 看不到；想让提醒也用新设置，就改 DEFAULT_CONFIG。
  */
 "use strict";
@@ -32,6 +32,20 @@ function isUsDst(ds) {
     return first + ((7 - DCA.weekdayOf(first)) % 7) + (nth - 1) * 7;
   };
   return d >= nthSunday(3, 2) && d < nthSunday(11, 1);
+}
+
+// 分档范围的文字：跌不到 10% / 跌 10–20% / 跌 ≥30%
+function rangeText(tiers, k) {
+  if (k < 0) return `跌不到 ${tiers[0].minDrawdown}%`;
+  if (k === tiers.length - 1) return `跌 ≥${tiers[k].minDrawdown}%`;
+  if (tiers[k].minDrawdown === 0) return `跌不到 ${tiers[k + 1].minDrawdown}%`;
+  return `跌 ${tiers[k].minDrawdown}–${tiers[k + 1].minDrawdown}%`;
+}
+// 趋势定投的状态文字，下跌趋势再带上是哪一档
+function trendStateText(key, trend, drawdown) {
+  const label = DCA.TREND_LABELS[key];
+  if (key !== "down") return label;
+  return `${label} · ${rangeText(trend.downTiers, DCA.tierIndex(drawdown, trend.downTiers))}`;
 }
 
 // 美东时间的今天（提醒在 UTC 12:00 运行，这时美东是当天早上）
@@ -64,38 +78,48 @@ function buildReminder(data, opts) {
   }
 
   // 用今天之前最近一个交易日的收盘价（和网页、回测的规则一致）
-  const sug = DCA.suggestionForDate(s, cfg, today);
+  // 两个策略都算一遍：主提醒按 DEFAULT_CONFIG.strategy，另一个写在后面供参考（网页上切换了策略也能对上）
+  const other = cfg.strategy === "trend" ? "tiered" : "trend";
   const d = DCA.drawdowns(s, cfg.basis);
+  const tl = DCA.trendLines(s, cfg.trend.maWindow);
+  const pre = { dd: d.dd, dev: tl.dev };
+  const sug = DCA.suggestionForDate(s, cfg, today, pre);
+  const alt = DCA.suggestionForDate(s, Object.assign({}, cfg, { strategy: other }), today, pre);
   const basedIdx = s.dates.lastIndexOf(sug.basedOn);
   const peak = d.peak[basedIdx];
   const peakDate = s.dates[d.peakIdx[basedIdx]];
+  const ma = tl.ma[basedIdx];
+  const dev = tl.dev[basedIdx];
   const basisName = cfg.basis === "ath" ? "历史最高点" : "近一年最高点";
-  const tier = DCA.tierIndex(sug.drawdown, cfg.tiers);
-  const tiers = cfg.tiers;
-  let tierText;
-  if (tier < 0) tierText = `跌不到 ${tiers[0].minDrawdown}%`;
-  else if (tier === tiers.length - 1) tierText = `跌 ≥${tiers[tier].minDrawdown}%`;
-  else if (tiers[tier].minDrawdown === 0) tierText = `跌不到 ${tiers[tier + 1].minDrawdown}%`;
-  else tierText = `跌 ${tiers[tier].minDrawdown}–${tiers[tier + 1].minDrawdown}%`;
   const mult = Number(sug.multiplier.toFixed(2));
-  const action = mult === 0 ? "这一档暂停不投" : mult > 1 ? `加码到 ${mult} 倍` : mult === 1 ? "正常投" : `少投，${mult} 倍`;
+  const action = mult === 0 ? "这周暂停不投" : mult > 1 ? `加码到 ${mult} 倍` : mult === 1 ? "正常投" : `少投，${mult} 倍`;
   const lag = DCA.dayNumber(today) - DCA.dayNumber(sug.basedOn);
   const [owner, repo] = [opts.owner || "", opts.repo || ""];
   const site = owner && repo ? `https://${owner.toLowerCase()}.github.io/${repo}/` : "";
+  const name = DCA.STRATEGY_NAMES[cfg.strategy];
+  const devText = `比 ${cfg.trend.maWindow} 日均线 ${usd(Math.round(ma * 100) / 100)} ${dev >= 0 ? "高" : "低"} ${Math.abs(dev).toFixed(1)}%`;
+  const ddText = sug.drawdown < 0.05 ? `在${basisName}附近` : `离${basisName}跌 ${sug.drawdown.toFixed(1)}%`;
 
   const title = `定投提醒 ${cnDate(today, true)}：投 ${usd(sug.amount)}（×${mult}）`;
   const lines = [];
   if (owner) lines.push(`@${owner}`, "");
-  lines.push(`### 今天（美东 ${cnDate(today)} ${DCA.WEEKDAY_CN[weekday]}）按规则投 **${usd(sug.amount)}**`);
+  lines.push(`### 今天（美东 ${cnDate(today)} ${DCA.WEEKDAY_CN[weekday]}）按规则投 **${usd(sug.amount)}**（${name}）`);
   lines.push("");
   lines.push(`${action}：基础金额 ${usd(cfg.baseAmount)} × ${mult}`);
   lines.push("");
   lines.push(`- QQQ 最新收盘：${usd(s.close[basedIdx])}（${cnDate(sug.basedOn)}）`);
-  lines.push(
-    sug.drawdown < 0.05
-      ? `- 现在就在${basisName}附近`
-      : `- 比${basisName} ${usd(peak)}（${cnDate(peakDate)}）低 ${sug.drawdown.toFixed(1)}%，属于「${tierText}」这一档`
-  );
+  if (cfg.strategy === "trend") {
+    lines.push(`- ${devText}，${ddText}，属于「${trendStateText(sug.state, cfg.trend, sug.drawdown)}」`);
+  } else {
+    lines.push(
+      sug.drawdown < 0.05
+        ? `- 现在就在${basisName}附近`
+        : `- 比${basisName} ${usd(peak)}（${cnDate(peakDate)}）低 ${sug.drawdown.toFixed(1)}%，属于「${rangeText(cfg.tiers, DCA.tierIndex(sug.drawdown, cfg.tiers))}」这一档`
+    );
+  }
+  const altMult = Number(alt.multiplier.toFixed(2));
+  const altWhy = other === "trend" ? `${devText}，属于「${trendStateText(alt.state, cfg.trend, alt.drawdown)}」` : ddText;
+  lines.push(`- 如果按「${DCA.STRATEGY_NAMES[other]}」：投 ${usd(alt.amount)}（×${altMult}）——${altWhy}`);
   lines.push(`- 美股开盘：北京时间 ${isUsDst(today) ? "21:30" : "22:30"}；如果今天美股休市，顺延到下一个交易日`);
   if (lag > 5) {
     lines.push("");
@@ -129,4 +153,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildReminder, todayInNewYork, isUsDst };
+module.exports = { buildReminder, todayInNewYork, isUsDst, rangeText };
