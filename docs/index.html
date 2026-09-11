@@ -248,6 +248,28 @@
   .paste-box .field { width: 100%; }
   .paste-box textarea { width: 100%; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; resize: vertical; }
 
+  /* ---------- 资金计划 ---------- */
+  .plan-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; }
+  .unit-input { display: flex; align-items: center; border: 1px solid var(--axis); border-radius: 8px; background: var(--surface); padding: 0 10px; }
+  .unit-input span { color: var(--muted); font-size: 15px; white-space: nowrap; }
+  .unit-input input { border: 0; width: 96px; padding: 7px 4px; background: transparent; font: inherit; font-size: 15px; color: var(--ink); min-height: 36px; }
+  .unit-input input.narrow { width: 56px; }
+  .unit-input:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .unit-input input:focus-visible { outline: none; }
+  .plan-result { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--grid); }
+  .plan-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+  .plan-choice { font: inherit; text-align: left; cursor: pointer; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .plan-choice:hover { border-color: var(--ink-2); }
+  .plan-choice[aria-checked="true"] { border: 2px solid var(--ink); padding: 11px 13px; background: var(--surface-2); }
+  .plan-choice .pc-label { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .plan-choice[aria-checked="true"] .pc-label::after { content: " · 已选"; color: var(--ink); }
+  .plan-choice .pc-amount { font-size: clamp(28px, 6vw, 38px); font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .plan-choice .pc-sub { font-size: 12px; color: var(--ink-2); }
+  @media (max-width: 560px) { .plan-choices { grid-template-columns: 1fr; } }
+  .plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; }
+  .plan-notes { margin: 12px 0 0; padding-left: 18px; }
+  .plan-notes li + li { margin-top: 2px; }
+
   @media (max-width: 560px) {
     .card { padding: 16px; border-radius: 12px; }
     .signal { padding: 20px 16px 16px; }
@@ -329,6 +351,56 @@
       <p class="sig-explain" id="sigExplain"></p>
       <div class="ladder" id="ladder" role="list" aria-label="分档"></div>
       <p class="small sig-foot" id="sigFoot"></p>
+    </section>
+
+    <section class="card" id="planner" style="margin-top:14px" aria-labelledby="pTitle">
+      <div class="card-head">
+        <h2 id="pTitle">我的资金计划：这周投多少</h2>
+        <p class="sub">填上你的闲钱和打算拿出来投资的比例，按现在的规则算出每周基础金额和这周该投多少。数字只保存在这台设备的浏览器里，不会上传。</p>
+      </div>
+      <div class="plan-form">
+        <label class="field">现在的闲钱
+          <span class="unit-input"><span>¥</span><input id="pCash" type="number" min="0" step="100" inputmode="decimal" placeholder="比如 10000"></span>
+        </label>
+        <label class="field">每月新增闲钱
+          <span class="unit-input"><span>¥</span><input id="pMonthly" type="number" min="0" step="100" inputmode="decimal" placeholder="没有就空着"></span>
+        </label>
+        <label class="field">拿出多少投资
+          <span class="unit-input"><input id="pShare" class="narrow" type="number" min="0" max="100" step="5" inputmode="decimal"><span>%</span></span>
+        </label>
+        <label class="field">现在这笔分多久投完
+          <select id="pWeeks">
+            <option value="13">3 个月</option>
+            <option value="26">半年</option>
+            <option value="52">1 年</option>
+            <option value="78">1 年半</option>
+            <option value="104">2 年</option>
+          </select>
+        </label>
+        <label class="field">汇率（1 美元 = ? 元）
+          <span class="unit-input"><input id="pRate" class="narrow" type="number" min="0.01" step="0.01" inputmode="decimal"><span>元</span></span>
+        </label>
+      </div>
+      <div class="plan-result" id="pResult" aria-live="polite">
+        <p class="hint" id="pEmpty">填好“现在的闲钱”或“每月新增闲钱”，再填拿出多少比例投资，就能算出这周投多少。</p>
+        <div id="pBody" hidden>
+          <p class="hint" id="pHeadline"></p>
+          <div class="plan-choices" role="radiogroup" aria-label="加码的钱怎么准备">
+            <button type="button" class="plan-choice" id="pChoiceSafe" data-mode="safe" role="radio" aria-checked="true">
+              <span class="pc-label">保守</span><span class="pc-amount"></span><span class="pc-sub"></span>
+            </button>
+            <button type="button" class="plan-choice" id="pChoiceAvg" data-mode="avg" role="radio" aria-checked="false">
+              <span class="pc-label">平均</span><span class="pc-amount"></span><span class="pc-sub"></span>
+            </button>
+          </div>
+          <div class="tiles" id="pTiles"></div>
+          <div class="plan-actions">
+            <button id="pApply" class="btn primary" type="button">设为每周基础金额</button>
+            <span class="small" id="pApplyMsg"></span>
+          </div>
+        </div>
+        <ul class="small plan-notes" id="pNotes"></ul>
+      </div>
     </section>
 
     <section class="card" id="journal" style="margin-top:14px" aria-labelledby="jTitle">
@@ -991,6 +1063,8 @@
     cache.pre = { dd: cache.dd.dd, dev: cache.tl.dev };
     cache.sig = DCA.currentSignal(s, cfg, { dd: cache.dd, tl: cache.tl });
     renderSignal();
+    cache.mults = DCA.weeklyMultipliers(s, cfg, cache.pre);
+    renderPlanner();
     renderJournal();
     updateTradeHint(false);
     renderDrawdownChart();
@@ -1479,6 +1553,143 @@
     fact("这不是投资建议", "这个网站只是帮你把自己定的规则算清楚、执行下去。投多少、要不要调整规则，请根据自己的收入、备用金和风险承受能力决定。");
   }
 
+  // ================= 资金计划（只存在本机浏览器） =================
+  var PLAN_KEY = "nasdaq100-dca-plan-v1";
+  var DEFAULT_RATE = 6.71; // 2026-09-11 美元兑人民币中间价，只是默认值
+  var plan = { cash: "", monthly: "", share: 30, weeks: 52, rate: DEFAULT_RATE, mode: "safe" };
+  var cny0 = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 });
+  function yuan(v) { return isFinite(v) ? (v < 0 ? MINUS : "") + cny0.format(Math.abs(v)) : "—"; }
+  function smallMoney(v) {
+    // 金额小的时候保留两位小数，大的时候取整
+    if (!isFinite(v)) return "—";
+    return Math.abs(v) < 100 ? usd2.format(v) : money(v);
+  }
+  function weeksText(w) {
+    var map = { 13: "3 个月", 26: "半年", 52: "1 年", 78: "1 年半", 104: "2 年" };
+    return map[w] || w + " 周";
+  }
+
+  function loadPlan() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(PLAN_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        ["cash", "monthly", "share", "weeks", "rate", "mode"].forEach(function (k) { if (saved[k] != null) plan[k] = saved[k]; });
+      }
+    } catch (e) { /* 存不了就用默认值 */ }
+  }
+  function savePlan() {
+    try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch (e) { /* 忽略 */ }
+  }
+  function roundBase(v) {
+    if (!(v > 0)) return 0;
+    return v >= 10 ? Math.round(v) : Math.round(v * 100) / 100;
+  }
+
+  function bindPlanner() {
+    loadPlan();
+    $("pCash").value = plan.cash;
+    $("pMonthly").value = plan.monthly;
+    $("pShare").value = plan.share;
+    $("pWeeks").value = String(plan.weeks);
+    if ($("pWeeks").value !== String(plan.weeks)) { plan.weeks = 52; $("pWeeks").value = "52"; }
+    $("pRate").value = plan.rate;
+    function readInputs() {
+      plan.cash = $("pCash").value;
+      plan.monthly = $("pMonthly").value;
+      plan.share = $("pShare").value;
+      plan.weeks = +$("pWeeks").value;
+      plan.rate = $("pRate").value;
+      savePlan();
+      renderPlanner();
+    }
+    ["pCash", "pMonthly", "pShare", "pRate"].forEach(function (id) { $(id).addEventListener("input", readInputs); });
+    $("pWeeks").addEventListener("change", readInputs);
+    ["pChoiceSafe", "pChoiceAvg"].forEach(function (id) {
+      $(id).addEventListener("click", function () {
+        plan.mode = $(id).getAttribute("data-mode");
+        savePlan();
+        renderPlanner();
+      });
+    });
+    $("pApply").addEventListener("click", function () {
+      var r = cache.plan;
+      if (!r || r.empty) return;
+      var b = roundBase(r.base);
+      if (!(b > 0)) return;
+      state.cfg.baseAmount = b;
+      applyConfig();
+      $("pApplyMsg").textContent = "已把每周基础金额改成 " + smallMoney(b) + "，上面的信号、下面的回测和买入记录都按这个金额算。";
+    });
+  }
+
+  function renderPlanner() {
+    if (!state.series || !cache.mults) return;
+    var rateOk = Number(plan.rate) > 0;
+    var input = { cash: plan.cash, monthly: plan.monthly, share: plan.share, weeks: plan.weeks, rate: rateOk ? plan.rate : DEFAULT_RATE, mode: plan.mode };
+    var r = DCA.planBudget(cache.mults, input, cache.sig.multiplier);
+    cache.plan = r;
+    $("pChoiceSafe").setAttribute("aria-checked", String(r.mode === "safe"));
+    $("pChoiceAvg").setAttribute("aria-checked", String(r.mode === "avg"));
+    $("pEmpty").hidden = !r.empty;
+    $("pBody").hidden = r.empty;
+
+    var notes = $("pNotes");
+    notes.textContent = "";
+    function note(t) { notes.appendChild(el("li", null, t)); }
+    note("闲钱指扣掉生活开销和应急备用金以后，几年内都不会用到的钱。");
+    note("汇率请按你换汇时的实际价格改；默认 " + DEFAULT_RATE + " 是 2026 年 9 月 11 日的市场中间价" + (rateOk ? "。" : "（你填的汇率不对，先按默认值算）。"));
+    if (r.empty) return;
+
+    var name = isTrend() ? DCA.TREND_LABELS[cache.sig.state] : "离最高点跌 " + cache.sig.drawdown.toFixed(1) + "%";
+    var m0 = r.nowMultiplier;
+    $("pHeadline").textContent = "这周（" + cnDate(cache.sig.nextDate, true) + "）按规则是 " + times(m0) + "（" + name + "）。按你的钱算，可以投：";
+    function choice(id, base, sub) {
+      var btn = $(id);
+      btn.querySelector(".pc-amount").textContent = smallMoney(base * m0);
+      btn.querySelector(".pc-sub").textContent = "约 " + yuan(base * m0 * r.rate) + " · 每周基础金额 " + smallMoney(base) + " · " + sub;
+    }
+    choice("pChoiceSafe", r.baseSafe, "历史上最难的一段时间也够用");
+    choice("pChoiceAvg", r.baseAvg, "长期刚好投完，大跌时要另外准备钱");
+
+    var tiles = $("pTiles");
+    tiles.textContent = "";
+    function tile(label, value, sub) {
+      var t = el("div", "tile");
+      t.appendChild(el("div", "t-label", label));
+      t.appendChild(el("div", "t-value", value));
+      if (sub) t.appendChild(el("div", "t-sub", sub));
+      tiles.appendChild(t);
+    }
+    var poolParts = [];
+    if (r.poolLocal > 0) poolParts.push(yuan(r.poolLocal));
+    if (r.monthlyLocal > 0) poolParts.push("每月 " + yuan(r.monthlyLocal));
+    var weeklyIn = r.pool / r.weeks + r.inflow;
+    tile("拿出来投资的钱", poolParts.join(" + "),
+      (r.poolLocal > 0 ? "现在这笔分 " + weeksText(r.weeks) + "投完；" : "") + "平均每周能拿出 " + smallMoney(weeklyIn) + "（约 " + yuan(weeklyIn * r.rate) + "）");
+    var keep = weeklyIn - r.avgWeekly;
+    tile("平时平均每周投", smallMoney(r.avgWeekly),
+      r.mode === "safe"
+        ? (keep > 0.005 ? "平时每周大约留下 " + smallMoney(keep) + "（约 " + yuan(keep * r.rate) + "），攒着给大跌时加码" : "长期刚好把钱投完")
+        : "长期下来刚好把每周能拿出的钱投完");
+    tile("遇到大跌时", "单周最多 " + smallMoney(r.maxWeekly),
+      r.shortfall > 0.005
+        ? "历史上最难的时候，" + weeksText(r.weeks) + "内还要额外准备约 " + yuan(r.shortfallLocal)
+        : "历史上最难的一段时间，按这个金额钱也够用");
+
+    var b = roundBase(r.base);
+    var same = Math.abs(b - state.cfg.baseAmount) < 0.005;
+    $("pApply").disabled = same || !(b > 0);
+    $("pApply").textContent = same ? "已经按 " + smallMoney(b) + " 计算" : "把每周基础金额设为 " + smallMoney(b);
+    if (!same) $("pApplyMsg").textContent = "上面的信号现在按每周 " + smallMoney(state.cfg.baseAmount) + " 算。";
+
+    if (r.mode === "safe") note("保守方式平时会攒下一些没投的钱。回测里，钱放着等下跌，长期收益不如按时投进去；平均方式投得多，但大跌时要另外准备钱。");
+    else note("平均方式遇到 2000–2002 年、2008 年那样的大跌，会连续很多周按 ×2、×3 投（最难的一年几乎每周都是 ×3），钱不够的话只能先按 ×1 投，或者改成保守方式。");
+    if (r.thisWeek > 0 && r.thisWeek < state.series.close[state.series.n - 1]) {
+      note("QQQ 一股约 " + usd2.format(state.series.close[state.series.n - 1]) + "，金额不到一股时需要券商支持买零碎股；手续费按券商规则另算。");
+    }
+    note("定投日提醒按仓库里的默认基础金额 $100 算，按提醒里的倍数（×1、×1.5…）乘你自己的基础金额就行。这里只是按你定的比例和规则算出来的数字，不构成投资建议。");
+  }
+
   // ================= 我的买入记录（只存在本机浏览器） =================
   var TRADES_KEY = "nasdaq100-dca-trades-v1";
   var trades = [];
@@ -1743,6 +1954,7 @@
     }
     populateStartYears();
     loadTrades();
+    bindPlanner();
     bindJournal();
     $("app").hidden = false;
     renderAll();
