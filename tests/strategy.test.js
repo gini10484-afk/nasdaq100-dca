@@ -406,3 +406,50 @@ test("默认设置：综合策略（趋势定投 + 近一年最高点 + 上涨�
   assert.equal(DCA.trendState(15, 5, cfg.trend).multiplier, 1);
   assert.equal(DCA.trendState(15, -5, cfg.trend).multiplier, 1.5);
 });
+
+// ---------- 资金计划 ----------
+test("资金计划：钱怎么换算成每周基础金额", () => {
+  // 每周都是 ×1：保守和平均一样，5200 分 52 周 = 每周 100
+  const flat = Array(300).fill(1);
+  const a = DCA.planBudget(flat, { cash: 5200, share: 100, weeks: 52, rate: 1 }, 1.5);
+  close(a.pool, 5200);
+  close(a.baseAvg, 100);
+  close(a.baseSafe, 100);
+  close(a.thisWeek, 150); // 这周 ×1.5
+  close(a.shortfall, 0);
+  close(a.lastsWeeks, 52);
+  // 人民币：1 万的 30% = 3000 元，汇率 6 → 500 美元；每月新增 2600 元的 30% = 780 元 → 每周 180 元 = 30 美元
+  const b = DCA.planBudget(flat, { cash: 10000, share: 30, monthly: 2600, weeks: 50, rate: 6, mode: "avg" }, 1);
+  close(b.poolLocal, 3000);
+  close(b.pool, 500);
+  close(b.monthlyLocal, 780);
+  close(b.inflow, 30);
+  close(b.base, 500 / 50 + 30); // 平均：每周 10 + 30
+  close(b.thisWeekLocal, 40 * 6);
+  assert.equal(b.mode, "avg");
+  // 什么都没填
+  assert.equal(DCA.planBudget(flat, {}, 1).empty, true);
+  assert.equal(DCA.planBudget(flat, { cash: 1000, share: 0 }, 1).empty, true);
+});
+
+test("资金计划：保守方式在历史最坏的时候也够用", () => {
+  // 平时 ×1，中间连续 10 周 ×3
+  const mults = Array(200).fill(1);
+  for (let i = 100; i < 110; i++) mults[i] = 3;
+  const input = { cash: 2000, share: 100, weeks: 20, rate: 1 };
+  const safe = DCA.planBudget(mults, input, 1);
+  const avg = DCA.planBudget(mults, { ...input, mode: "avg" }, 1);
+  assert.ok(safe.baseSafe < avg.baseAvg);
+  close(safe.shortfall, 0); // 保守：从来不会不够
+  assert.ok(avg.shortfall > 0); // 平均：遇到连续加码会不够
+  // 保守金额：最坏的 20 周是 10 周 ×3 + 10 周 ×1 = 40 倍 → 2000 / 40 = 50
+  close(safe.baseSafe, 50);
+  close(safe.worstSpend, 2000);
+  close(safe.maxWeekly, 150);
+  // 用历史倍数序列
+  const dates = tradingDays("2020-01-06", 400);
+  const s = series(dates, dates.map((_, i) => 100 + 20 * Math.sin(i / 30)));
+  const m = DCA.weeklyMultipliers(s, TIERED);
+  assert.equal(m.length, DCA.backtest(s, TIERED, {}).weeks);
+  assert.ok(m.some((x) => x > 1));
+});
