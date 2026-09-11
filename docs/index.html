@@ -178,7 +178,7 @@
   .tip-row .key.none { background: transparent; }
 
   /* ---------- 表格 ---------- */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
   th:first-child, td:first-child { text-align: left; }
@@ -218,6 +218,23 @@
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
 
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: center; }
+
+  /* ---------- 我的买入记录 ---------- */
+  .trade-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; }
+  .trade-form .grow { flex: 1 1 180px; }
+  .trade-form .grow input { width: 100%; }
+  .field input[type="date"] { min-width: 150px; }
+  .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--surface); font-weight: 600; }
+  .btn.primary:hover { opacity: 0.88; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  #tHint { margin-top: 8px; min-height: 1.6em; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0; }
+  .tile { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; }
+  .tile .t-label { font-size: 12px; color: var(--ink-2); }
+  .tile .t-value { font-size: 22px; font-weight: 650; margin-top: 2px; line-height: 1.3; }
+  .tile .t-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  td.note-cell { white-space: normal; min-width: 80px; max-width: 220px; text-align: left; color: var(--ink-2); }
+  .sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   @media (max-width: 560px) {
     .card { padding: 16px; border-radius: 12px; }
@@ -288,6 +305,54 @@
       <p class="sig-explain" id="sigExplain"></p>
       <div class="ladder" id="ladder" role="list" aria-label="分档"></div>
       <p class="small sig-foot" id="sigFoot"></p>
+    </section>
+
+    <section class="card" id="journal" style="margin-top:14px" aria-labelledby="jTitle">
+      <div class="card-head">
+        <h2 id="jTitle">我的买入记录</h2>
+        <p class="sub">每次买完记一笔，和规则建议对比。记录只保存在这台设备的浏览器里，不会上传；换手机或电脑前，先点“导出备份”。</p>
+      </div>
+      <form id="tradeForm" class="trade-form" novalidate>
+        <label class="field">买入日期（美东）
+          <input id="tDate" type="date" required>
+        </label>
+        <label class="field">实际投入
+          <span class="money-input"><span>$</span><input id="tAmount" type="number" min="0.01" step="0.01" inputmode="decimal" required></span>
+        </label>
+        <label class="field">成交价
+          <span class="money-input"><span>$</span><input id="tPrice" type="number" min="0.01" step="0.01" inputmode="decimal" required></span>
+        </label>
+        <label class="field grow">备注（可选）
+          <input id="tNote" type="text" maxlength="60" placeholder="比如：分两笔买的">
+        </label>
+        <button class="btn primary" type="submit">添加记录</button>
+      </form>
+      <p class="small" id="tHint" aria-live="polite"></p>
+      <div class="tiles" id="tTiles" hidden></div>
+      <div class="table-wrap" id="tTableWrap" hidden>
+        <table id="tradeTable">
+          <thead>
+            <tr>
+              <th scope="col">日期</th>
+              <th scope="col">实际投入</th>
+              <th scope="col">规则建议</th>
+              <th scope="col">差额</th>
+              <th scope="col">成交价</th>
+              <th scope="col">股数</th>
+              <th scope="col">备注</th>
+              <th scope="col"><span class="sr-only">操作</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint" id="tEmpty" style="margin-top:12px">还没有记录。买完第一笔后，在上面填好日期、实际投入和成交价，点“添加记录”。</p>
+      <div class="tier-actions">
+        <button id="tExport" class="btn" type="button">导出备份</button>
+        <button id="tImportBtn" class="btn" type="button">导入备份</button>
+        <input id="tImport" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p class="small" id="tMsg" aria-live="polite" style="margin-top:8px"></p>
     </section>
 
     <section class="card" style="margin-top:14px">
@@ -785,6 +850,8 @@
     cache.dd = DCA.drawdowns(s, cfg.basis);
     cache.sig = DCA.currentSignal(s, cfg);
     renderSignal();
+    renderJournal();
+    updateTradeHint(false);
     renderDrawdownChart();
     renderBacktest();
     renderStarts();
@@ -1087,6 +1154,192 @@
     fact("这不是投资建议", "这个网站只是帮你把自己定的规则算清楚、执行下去。投多少、要不要调整规则，请根据自己的收入、备用金和风险承受能力决定。");
   }
 
+  // ================= 我的买入记录（只存在本机浏览器） =================
+  var TRADES_KEY = "nasdaq100-dca-trades-v1";
+  var trades = [];
+
+  function validTrade(t) {
+    return !!t && /^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) && Number(t.amount) > 0 && Number(t.price) > 0;
+  }
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function tradeKey(t) { return t.date + "|" + Number(t.amount).toFixed(2) + "|" + Number(t.price).toFixed(4); }
+  function cleanTrade(t) {
+    return { id: String(t.id || newId()), date: String(t.date), amount: Number(t.amount), price: Number(t.price), note: String(t.note || "").slice(0, 60) };
+  }
+  function loadTrades() {
+    try {
+      var list = JSON.parse(localStorage.getItem(TRADES_KEY) || "[]");
+      trades = Array.isArray(list) ? list.filter(validTrade).map(cleanTrade) : [];
+    } catch (e) { trades = []; }
+  }
+  function saveTrades() {
+    try { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); return true; } catch (e) { return false; }
+  }
+  function todayNewYork() {
+    try {
+      var parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+      var get = function (t) { return parts.filter(function (p) { return p.type === t; })[0].value; };
+      return get("year") + "-" + get("month") + "-" + get("day");
+    } catch (e) {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  function updateTradeHint(fill) {
+    if (!state.series) return;
+    var ds = $("tDate").value;
+    var sug = ds ? DCA.suggestionForDate(state.series, state.cfg, ds, cache.dd.dd) : null;
+    if (!sug) {
+      $("tHint").textContent = ds ? "这个日期比行情数据还早，没法算规则建议。" : "";
+      return;
+    }
+    $("tHint").textContent =
+      "规则建议这天投 " + money(sug.amount) + "（" + times(sug.multiplier) + "，按 " + cnDate(sug.basedOn) + " 收盘价离最高点跌 " +
+      sug.drawdown.toFixed(1) + "%）。" + (sug.closeOnDate != null ? "当天收盘价 " + usd2.format(sug.closeOnDate) + "，" : "") +
+      "成交价请填你实际买到的价格。";
+    if (fill) {
+      var price = sug.closeOnDate != null ? sug.closeOnDate : sug.latestClose;
+      if (!$("tAmount").value || $("tAmount").dataset.auto === "1") { $("tAmount").value = sug.amount; $("tAmount").dataset.auto = "1"; }
+      if (!$("tPrice").value || $("tPrice").dataset.auto === "1") { $("tPrice").value = Number(price.toFixed(2)); $("tPrice").dataset.auto = "1"; }
+    }
+  }
+
+  function renderJournal() {
+    if (!state.series) return;
+    var sum = DCA.summarizeTrades(state.series, state.cfg, trades);
+    var has = sum.count > 0;
+    $("tEmpty").hidden = has;
+    $("tTableWrap").hidden = !has;
+    $("tTiles").hidden = !has;
+    $("tExport").disabled = !has;
+
+    var tiles = $("tTiles");
+    tiles.textContent = "";
+    function tile(label, value, sub) {
+      var t = el("div", "tile");
+      t.appendChild(el("div", "t-label", label));
+      t.appendChild(el("div", "t-value", value));
+      if (sub) t.appendChild(el("div", "t-sub", sub));
+      tiles.appendChild(t);
+    }
+    if (has) {
+      tile("已记录", sum.count + " 笔", "其中 " + sum.followed + " 笔按规则执行" + (sum.compared < sum.count ? "，" + (sum.count - sum.compared) + " 笔无法对比" : ""));
+      var gap = sum.invested - sum.suggestedTotal;
+      tile("实际总投入", money(sum.invested),
+        "规则建议合计 " + money(sum.suggestedTotal) + (Math.abs(gap) < 0.5 ? "，完全一致" : "，" + (gap > 0 ? "多投了 " : "少投了 ") + money(Math.abs(gap))));
+      tile("现在市值", money(sum.value), "持有 " + sum.shares.toFixed(4) + " 股 · 按 " + cnDate(sum.lastDate) + " 收盘 " + usd2.format(sum.lastClose));
+      tile("浮动盈亏", signedMoney(sum.profit), pct(sum.totalReturn, 1, true) + " · 平均成本 " + usd2.format(sum.avgCost));
+      if (sum.spanDays >= 365 && isFinite(sum.xirr)) tile("年化收益率（XIRR）", pct(sum.xirr, 2), "满一年才显示，短期年化没有参考意义");
+    }
+
+    var tb = $("tradeTable").tBodies[0];
+    tb.textContent = "";
+    sum.rows.slice().reverse().forEach(function (r) {
+      var tr = el("tr");
+      var dateCell = el("td", null, shortDate(r.date));
+      dateCell.appendChild(el("span", "note", DCA.WEEKDAY_CN[DCA.weekdayOf(DCA.dayNumber(r.date))]));
+      tr.appendChild(dateCell);
+      tr.appendChild(el("td", null, money(r.amount)));
+      var sugCell = el("td");
+      if (r.suggested == null) sugCell.textContent = "—";
+      else {
+        sugCell.appendChild(document.createTextNode(money(r.suggested) + " " + times(r.multiplier)));
+        sugCell.appendChild(el("span", "note", "跌 " + r.drawdown.toFixed(1) + "%"));
+      }
+      tr.appendChild(sugCell);
+      var diffText = "—";
+      if (r.diff != null) diffText = Math.abs(r.diff) <= Math.max(1, r.suggested * 0.05) ? "按规则" : (r.diff > 0 ? "多投 " : "少投 ") + money(Math.abs(r.diff));
+      tr.appendChild(el("td", null, diffText));
+      tr.appendChild(el("td", null, usd2.format(r.price)));
+      tr.appendChild(el("td", null, r.shares.toFixed(4)));
+      tr.appendChild(el("td", "note-cell", r.note || ""));
+      var actCell = el("td");
+      var del = el("button", "link-btn", "删除");
+      del.type = "button";
+      del.setAttribute("aria-label", "删除 " + r.date + " 的记录");
+      del.addEventListener("click", function () {
+        if (del.dataset.armed !== "1") {
+          del.dataset.armed = "1";
+          del.textContent = "确认删除";
+          setTimeout(function () { if (del.isConnected) { del.dataset.armed = ""; del.textContent = "删除"; } }, 4000);
+          return;
+        }
+        trades = trades.filter(function (x) { return x.id !== r.id; });
+        saveTrades();
+        renderJournal();
+        $("tMsg").textContent = "已删除 " + shortDate(r.date) + " 的记录。";
+      });
+      actCell.appendChild(del);
+      tr.appendChild(actCell);
+      tb.appendChild(tr);
+    });
+  }
+
+  function bindJournal() {
+    $("tDate").value = todayNewYork();
+    $("tDate").addEventListener("change", function () { updateTradeHint(true); });
+    ["tAmount", "tPrice"].forEach(function (id) {
+      $(id).addEventListener("input", function () { $(id).dataset.auto = "0"; });
+    });
+    $("tradeForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var t = cleanTrade({ date: $("tDate").value, amount: $("tAmount").value, price: $("tPrice").value, note: $("tNote").value.trim() });
+      if (!validTrade(t)) {
+        $("tMsg").textContent = "请填好买入日期、实际投入和成交价（金额和价格都要大于 0）。";
+        return;
+      }
+      trades.push(t);
+      var saved = saveTrades();
+      $("tMsg").textContent = saved
+        ? "已记录：" + shortDate(t.date) + " 投入 " + money(t.amount) + "，成交价 " + usd2.format(t.price) + "。"
+        : "已添加，但这个浏览器不允许保存（可能是无痕模式），关掉页面就会丢失，请先导出备份。";
+      $("tNote").value = "";
+      $("tAmount").dataset.auto = "1";
+      $("tPrice").dataset.auto = "1";
+      renderJournal();
+      updateTradeHint(true);
+    });
+    $("tExport").addEventListener("click", function () {
+      var payload = { app: "nasdaq100-dca", version: 1, exported_at: new Date().toISOString(), trades: trades };
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "定投买入记录-" + todayNewYork() + ".json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      $("tMsg").textContent = "已导出 " + trades.length + " 笔记录。换设备时，在新设备的这个网站上点“导入备份”。";
+    });
+    $("tImportBtn").addEventListener("click", function () { $("tImport").click(); });
+    $("tImport").addEventListener("change", function () {
+      var f = $("tImport").files && $("tImport").files[0];
+      if (!f) return;
+      f.text()
+        .then(function (text) {
+          var obj = JSON.parse(text);
+          var list = Array.isArray(obj) ? obj : obj && obj.trades;
+          if (!Array.isArray(list)) throw new Error("文件里没有找到买入记录");
+          var seen = {};
+          trades.forEach(function (t) { seen[tradeKey(t)] = true; });
+          var added = 0, skipped = 0;
+          list.forEach(function (raw) {
+            var t = cleanTrade(raw || {});
+            if (!validTrade(t) || seen[tradeKey(t)]) { skipped++; return; }
+            seen[tradeKey(t)] = true;
+            trades.push(t);
+            added++;
+          });
+          saveTrades();
+          renderJournal();
+          $("tMsg").textContent = "导入完成：新增 " + added + " 笔" + (skipped ? "，跳过 " + skipped + " 笔（重复或格式不对）" : "") + "。";
+        })
+        .catch(function (err) {
+          $("tMsg").textContent = "导入失败：" + err.message + "。请选择之前用“导出备份”保存的 .json 文件。";
+        })
+        .then(function () { $("tImport").value = ""; });
+    });
+  }
+
   // ================= 启动 =================
   function showNotice(text) {
     $("noticeText").textContent = text;
@@ -1113,8 +1366,11 @@
       showNotice("今天用的是备用数据源，分红调整价是估算的，回测数字可能有一点点偏差；Yahoo 恢复后会自动修正。");
     }
     populateStartYears();
+    loadTrades();
+    bindJournal();
     $("app").hidden = false;
     renderAll();
+    updateTradeHint(true);
 
     var lastW = 0, timer = null;
     var ro = new ResizeObserver(function (entries) {
