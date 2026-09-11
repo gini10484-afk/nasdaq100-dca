@@ -1,0 +1,83 @@
+# 这个文件在 GitHub 仓库里的位置必须是：.github/workflows/update-and-deploy.yml
+# 每个美股交易日收盘后：拉最新 QQQ 行情 → 保存到 docs/data.json → 发布网站到 GitHub Pages
+# 借鉴：promise96319/qdii（GitHub Actions 每日自动抓数据）、hzm0321/real-time-fund（Actions 部署到 Pages）
+
+name: 每日更新数据并发布网站
+
+on:
+  schedule:
+    # UTC 22:30，周一到周五 = 北京时间 周二到周六 早上 06:30（美股已收盘）
+    # GitHub 的定时任务偶尔会晚几十分钟，属于正常现象
+    - cron: "30 22 * * 1-5"
+  workflow_dispatch: {} # 允许在 Actions 页面手动点 "Run workflow"
+  push:
+    branches: [main] # 你改了网页或设置并提交后，自动重新发布
+
+concurrency:
+  group: update-and-deploy
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # 需要把新数据提交回仓库
+    steps:
+      - name: 下载仓库代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 更新行情数据
+        id: data
+        continue-on-error: true # 数据源暂时失败时，照样用旧数据发布网站（网页会提示数据没更新）
+        run: python scripts/update_data.py
+
+      - name: 把新数据提交回仓库
+        if: steps.data.outcome == 'success'
+        run: |
+          if git diff --quiet -- docs/data.json; then
+            echo "数据没有变化，不需要提交"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs/data.json
+            git commit -m "更新 QQQ 行情数据 $(date -u +%Y-%m-%d)"
+            git pull --rebase origin main
+            git push
+          fi
+
+      - name: 打包网站文件
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs
+
+      - name: 如果数据没更新成功，标记为失败（GitHub 会发邮件提醒你）
+        if: steps.data.outcome == 'failure'
+        run: |
+          echo "::warning::今天的行情数据没有更新成功，网站暂时显示旧数据。通常第二天会自动恢复。"
+          exit 1
+
+  deploy:
+    needs: update
+    if: ${{ !cancelled() }} # 数据更新失败也照常发布（用旧数据）
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      actions: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
