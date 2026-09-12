@@ -781,6 +781,132 @@
     };
   }
 
+  // ---------- 每年固定投一笔（比如每年 35 万人民币） ----------
+  // 美元兑人民币的年平均汇率：1999–2003 是当时的固定汇率，2000 年起用欧洲央行公布的汇率算年均值。
+  // 以后每年可以在这里补一行；没有的年份按最后一个有数据的年份算。
+  var CNY_RATES = {
+    1999: 8.2770, 2000: 8.2770, 2001: 8.2770, 2002: 8.2770, 2003: 8.2770, 2004: 8.2777,
+    2005: 8.1924, 2006: 7.9737, 2007: 7.6063, 2008: 6.9485, 2009: 6.8311, 2010: 6.7678,
+    2011: 6.4624, 2012: 6.3094, 2013: 6.1480, 2014: 6.1612, 2015: 6.2854, 2016: 6.6444,
+    2017: 6.7587, 2018: 6.6187, 2019: 6.9114, 2020: 6.9003, 2021: 6.4491, 2022: 6.7347,
+    2023: 7.0846, 2024: 7.1956, 2025: 7.1874, 2026: 6.8296,
+  };
+  function rateForYear(year, rates) {
+    var t = rates || CNY_RATES;
+    if (t[year] > 0) return t[year];
+    var years = Object.keys(t).map(Number).sort(function (a, b) { return a - b; });
+    if (!years.length) return 1;
+    if (year < years[0]) return t[years[0]];
+    return t[years[years.length - 1]];
+  }
+
+  // opts：{ amount: 每年投多少本币, startYear, mode: "lump" 年初一次性 | "spread" 摊到每次定投 | "strategy" 按当前策略,
+  //         nowRate: 现在的汇率（1 美元换多少本币）, rates: 年均汇率表, dd/dev: 提前算好的数组 }
+  function annualBacktest(series, config, opts) {
+    opts = opts || {};
+    var cfg = withDefaults(config);
+    var n = series.n;
+    var amount = Number(opts.amount);
+    if (!(n > 1) || !(amount > 0)) return null;
+    var mode = opts.mode === "lump" || opts.mode === "strategy" ? opts.mode : "spread";
+    var nowRate = Number(opts.nowRate) > 0 ? Number(opts.nowRate) : rateForYear(+series.dates[n - 1].slice(0, 4), opts.rates);
+    var startYear = Math.max(+series.dates[0].slice(0, 4), Math.round(Number(opts.startYear) || 0) || +series.dates[0].slice(0, 4));
+    var perYear = cfg.frequency === "daily" ? 252 : 52; // 一年大约投几次
+
+    var dd = opts.dd || drawdowns(series, cfg.basis).dd;
+    var dev = opts.dev || (cfg.strategy === "trend" ? trendLines(series, cfg.trend.maWindow).dev : null);
+    var avgMult = 1;
+    if (mode === "strategy") {
+      var days0 = investDays(series, cfg.investWeekday, cfg.frequency);
+      var sum = 0, cnt = 0;
+      for (var q = 0; q < days0.length; q++) {
+        if (days0[q] < 1) continue;
+        sum += decide(cfg, cfg.strategy, dd, dev, days0[q] - 1).multiplier;
+        cnt++;
+      }
+      avgMult = cnt ? sum / cnt : 1;
+    }
+
+    var picks = [];
+    if (mode === "lump") {
+      var seen = {};
+      for (var i = 0; i < n; i++) {
+        var y = +series.dates[i].slice(0, 4);
+        if (y >= startYear && !seen[y]) {
+          seen[y] = 1;
+          picks.push({ idx: i, local: amount, year: y });
+        }
+      }
+    } else {
+      var days = investDays(series, cfg.investWeekday, cfg.frequency);
+      for (var k = 0; k < days.length; k++) {
+        var j = days[k];
+        if (j < 1) continue;
+        var yy = +series.dates[j].slice(0, 4);
+        if (yy < startYear) continue;
+        picks.push({ idx: j, local: amount / perYear, year: yy });
+      }
+    }
+    if (!picks.length) return null;
+
+    var shares = 0, investedLocal = 0, investedUsd = 0, cash = 0, maxCash = 0;
+    var flowsLocal = [], flowsUsd = [], byYear = {}, order = [];
+    for (var m2 = 0; m2 < picks.length; m2++) {
+      var p2 = picks[m2], rate = rateForYear(p2.year, opts.rates);
+      var usd = p2.local / rate;
+      investedLocal += p2.local;
+      investedUsd += usd;
+      flowsLocal.push([series.day[p2.idx], p2.local]);
+      flowsUsd.push([series.day[p2.idx], usd]);
+      var buy = usd;
+      if (mode === "strategy") {
+        cash += usd;
+        var mult = decide(cfg, cfg.strategy, dd, dev, p2.idx - 1).multiplier;
+        buy = Math.min(cash, ((amount / perYear) / rate / (avgMult || 1)) * mult);
+        cash -= buy;
+        if (cash > maxCash) maxCash = cash;
+      }
+      var sh = buy / series.adj[p2.idx];
+      shares += sh;
+      if (!byYear[p2.year]) {
+        byYear[p2.year] = { year: p2.year, date: series.dates[p2.idx], rate: rate, local: 0, usd: 0, shares: 0 };
+        order.push(p2.year);
+      }
+      byYear[p2.year].local += p2.local;
+      byYear[p2.year].usd += usd;
+      byYear[p2.year].shares += sh;
+    }
+
+    var lastAdj = series.adj[n - 1];
+    var valueUsd = shares * lastAdj + cash;
+    var valueLocal = valueUsd * nowRate;
+    var years = order.map(function (y2) {
+      var r2 = byYear[y2];
+      var v = r2.shares * lastAdj * nowRate;
+      return { year: r2.year, date: r2.date, rate: r2.rate, local: r2.local, usd: r2.usd, valueLocal: v, multiple: r2.local > 0 ? v / r2.local : 0 };
+    });
+    return {
+      mode: mode,
+      startDate: series.dates[picks[0].idx],
+      endDate: series.dates[n - 1],
+      times: picks.length,
+      investedLocal: investedLocal,
+      investedUsd: investedUsd,
+      shares: shares,
+      cashUsd: cash,
+      maxCashUsd: maxCash,
+      valueUsd: valueUsd,
+      valueLocal: valueLocal,
+      profitLocal: valueLocal - investedLocal,
+      totalReturn: investedLocal > 0 ? valueLocal / investedLocal - 1 : 0,
+      totalReturnUsd: investedUsd > 0 ? valueUsd / investedUsd - 1 : 0,
+      xirrLocal: xirr(flowsLocal, valueLocal, series.day[n - 1]),
+      xirrUsd: xirr(flowsUsd, valueUsd, series.day[n - 1]),
+      nowRate: nowRate,
+      years: years,
+    };
+  }
+
   // ---------- 买入记录备份（发到邮箱 / 粘贴导入） ----------
   var BACKUP_BEGIN = "----- 定投备份开始 -----";
   var BACKUP_END = "----- 定投备份结束 -----";
@@ -910,6 +1036,9 @@
     summarizeTrades: summarizeTrades,
     weeklyMultipliers: weeklyMultipliers,
     planBudget: planBudget,
+    CNY_RATES: CNY_RATES,
+    rateForYear: rateForYear,
+    annualBacktest: annualBacktest,
     formatTradesBackup: formatTradesBackup,
     parseTradesBackup: parseTradesBackup,
     yearly: yearly,
