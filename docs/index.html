@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>我的纳指100定投计划</title>
-<meta name="description" content="QQQ 每周定投：跌多多投 / 趋势定投信号 + 历史回测，每个美股交易日自动更新">
+<meta name="description" content="QQQ 定投（每周或每日）：跌多多投 / 趋势定投信号 + 历史回测，每个美股交易日自动更新">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M6 22l6-6 5 4 9-10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -283,7 +283,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">QQQ · 纳斯达克100 · 每周定投 · <span id="eyebrowStrategy">跌多多投</span></p>
+    <p class="eyebrow">QQQ · 纳斯达克100 · <span id="eyebrowFreq">每周定投</span> · <span id="eyebrowStrategy">跌多多投</span></p>
     <h1>我的纳指100定投计划</h1>
     <p class="meta" id="meta">正在读取行情数据…</p>
   </header>
@@ -298,10 +298,16 @@
           <option value="trend">趋势定投</option>
         </select>
       </label>
-      <label class="field">每周基础金额
+      <label class="field">多久投一次
+        <select id="frequency">
+          <option value="weekly">每周一次</option>
+          <option value="daily">每个交易日</option>
+        </select>
+      </label>
+      <label class="field"><span id="baseLabel">每周基础金额</span>
         <span class="money-input"><span>$</span><input id="base" type="number" min="1" step="10" inputmode="decimal"></span>
       </label>
-      <label class="field">定投日（美东时间）
+      <label class="field" id="weekdayField">定投日（美东时间）
         <select id="weekday">
           <option value="1">每周一</option><option value="2">每周二</option><option value="3">每周三</option><option value="4">每周四</option><option value="5">每周五</option>
         </select>
@@ -356,7 +362,7 @@
     <section class="card" id="planner" style="margin-top:14px" aria-labelledby="pTitle">
       <div class="card-head">
         <h2 id="pTitle">我的资金计划：这周投多少</h2>
-        <p class="sub">填上你的闲钱和打算拿出来投资的比例，按现在的规则算出每周基础金额和这周该投多少。数字只保存在这台设备的浏览器里，不会上传。</p>
+        <p class="sub">填上你的闲钱和打算拿出来投资的比例，按现在的规则算出每次基础金额和下次该投多少。数字只保存在这台设备的浏览器里，不会上传。</p>
       </div>
       <div class="plan-form">
         <label class="field">现在的闲钱
@@ -395,7 +401,7 @@
           </div>
           <div class="tiles" id="pTiles"></div>
           <div class="plan-actions">
-            <button id="pApply" class="btn primary" type="button">设为每周基础金额</button>
+            <button id="pApply" class="btn primary" type="button">设为基础金额</button>
             <span class="small" id="pApplyMsg"></span>
           </div>
         </div>
@@ -487,7 +493,7 @@
     <section class="block" aria-labelledby="btTitle">
       <div class="section-head">
         <h2 id="btTitle">这个规则过去管用吗？</h2>
-        <label class="inline-field">从 <select id="startYear"></select> 年初开始，每周定投到最新</label>
+        <label class="inline-field">从 <select id="startYear"></select> 年初开始，按这个频率投到最新</label>
       </div>
       <p class="verdict" id="verdict"></p>
 
@@ -505,7 +511,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <p class="small" style="margin-top:10px">三种方式每周投的钱不一样，总投入不同，所以直接比“赚了多少钱”不公平。<b>年化收益率（XIRR）</b>考虑了每一笔钱投进去的时间和金额，比较它最公平。</p>
+        <p class="small" style="margin-top:10px">三种方式每次投的钱不一样，总投入不同，所以直接比“赚了多少钱”不公平。<b>年化收益率（XIRR）</b>考虑了每一笔钱投进去的时间和金额，比较它最公平。</p>
       </div>
 
       <div class="card" style="margin-top:14px">
@@ -684,15 +690,24 @@
     } catch (e) { /* 隐私模式等情况下存不了，不影响使用 */ }
   }
   function isTrend() { return state.cfg.strategy === "trend"; }
+  function isDaily() { return state.cfg.frequency === "daily"; }
+  // 文案：每周定投说“每周/周”，每日定投说“每次/天”
+  function perWord() { return isDaily() ? "每次" : "每周"; }
+  function countUnit() { return isDaily() ? " 天" : " 周"; }
+  function baseWord() { return isDaily() ? "每次基础金额" : "每周基础金额"; }
   function strategyName(k) { return DCA.STRATEGY_NAMES[k || state.cfg.strategy]; }
 
   function syncControls() {
     var trend = isTrend();
     $("strategy").value = state.cfg.strategy;
+    $("frequency").value = state.cfg.frequency;
+    $("weekdayField").hidden = isDaily();
+    $("baseLabel").textContent = baseWord();
     $("base").value = state.cfg.baseAmount;
     $("weekday").value = String(state.cfg.investWeekday);
     $("basis").value = state.cfg.basis;
     $("eyebrowStrategy").textContent = strategyName();
+    $("eyebrowFreq").textContent = isDaily() ? "每个交易日定投" : "每周定投";
     $("tieredRules").hidden = trend;
     $("trendRules").hidden = !trend;
     $("toggleTiers").textContent = state.tiersOpen ? (trend ? "收起规则" : "收起分档") : trend ? "调整规则" : "调整分档";
@@ -839,6 +854,7 @@
       applyConfig();
     });
     $("strategy").addEventListener("change", function () { state.cfg.strategy = $("strategy").value; applyConfig(); });
+    $("frequency").addEventListener("change", function () { state.cfg.frequency = $("frequency").value; applyConfig(); });
     $("weekday").addEventListener("change", function () { state.cfg.investWeekday = +$("weekday").value; applyConfig(); });
     $("basis").addEventListener("change", function () { state.cfg.basis = $("basis").value; applyConfig(); });
     $("toggleTiers").addEventListener("click", function () {
@@ -1326,12 +1342,12 @@
     v.appendChild(document.createTextNode("，" + cmpText(cur, p) + "。"));
     if (isTrend()) {
       v.appendChild(document.createTextNode(
-        moneyText(cur) + "：涨太多时少投了 " + cur.trimmedWeeks + " 周，加码了 " + cur.boostedWeeks + " 周，单周最多要投 " + money(cur.maxAmount) +
-        (cur.longestStreak ? "，最长连续 " + cur.longestStreak + " 周都在加码。" : "。")
+        moneyText(cur) + "：涨太多时少投了 " + cur.trimmedWeeks + countUnit() + "，加码了 " + cur.boostedWeeks + countUnit() + "，单次最多要投 " + money(cur.maxAmount) +
+        (cur.longestStreak ? "，最长连续 " + cur.longestStreak + countUnit() + "都在加码。" : "。")
       ));
     } else if (cur.invested > p.invested) {
       v.appendChild(document.createTextNode(
-        "代价是" + moneyText(cur) + "，单周最多要投 " + money(cur.maxAmount) + "，最长连续 " + cur.longestStreak + " 周都在加码。"
+        "代价是" + moneyText(cur) + "，单次最多要投 " + money(cur.maxAmount) + "，最长连续 " + cur.longestStreak + countUnit() + "都在加码。"
       ));
     } else {
       v.appendChild(document.createTextNode("这段时间几乎没有触发加码，两种方式投的钱差不多。"));
@@ -1355,19 +1371,19 @@
     }
     var all = [p, t, tr];
     function each(fn) { return all.map(fn); }
-    row("定投了几周", each(function (r) { return r.weeks + " 周"; }));
+    row(isDaily() ? "定投了几天" : "定投了几周", each(function (r) { return r.weeks + countUnit(); }));
     row("总共投入", each(function (r) { return r === p ? money(r.invested) : [money(r.invested), "是普通的 " + (r.invested / p.invested).toFixed(2) + " 倍"]; }));
     row("现在市值", each(function (r) { return money(r.finalValue); }));
     row("赚了", each(function (r) { return signedMoney(r.profit); }));
     row("总收益率", each(function (r) { return pct(r.totalReturn, 1, true); }));
     row("年化收益率（XIRR）", each(function (r) { return pct(r.xirr, 2); }), { em: true });
     row("平均买入价", each(function (r) { return usd2.format(r.avgCost); }));
-    row("单周最多投入", each(function (r) { return r === p ? money(r.maxAmount) : [money(r.maxAmount), r.maxAmountDate ? shortDate(r.maxAmountDate) : ""]; }));
-    row("加码的周数", each(function (r) { return r === p ? "0 周" : [r.boostedWeeks + " 周", "占 " + pct(r.boostedWeeks / r.weeks, 0)]; }));
-    row("少投的周数", each(function (r) { return r.trimmedWeeks ? [r.trimmedWeeks + " 周", "少投 " + money(r.trimmedTotal)] : "0 周"; }));
+    row("单次最多投入", each(function (r) { return r === p ? money(r.maxAmount) : [money(r.maxAmount), r.maxAmountDate ? shortDate(r.maxAmountDate) : ""]; }));
+    row(isDaily() ? "加码的天数" : "加码的周数", each(function (r) { return r === p ? "0" + countUnit() : [r.boostedWeeks + countUnit(), "占 " + pct(r.boostedWeeks / r.weeks, 0)]; }));
+    row(isDaily() ? "少投的天数" : "少投的周数", each(function (r) { return r.trimmedWeeks ? [r.trimmedWeeks + countUnit(), "少投 " + money(r.trimmedTotal)] : "0" + countUnit(); }));
     row("最长连续加码", each(function (r) {
       if (r === p) return "—";
-      return r.longestStreak ? [r.longestStreak + " 周", shortDate(r.longestStreakStart) + " – " + shortDate(r.longestStreakEnd)] : "0 周";
+      return r.longestStreak ? [r.longestStreak + countUnit(), shortDate(r.longestStreakStart) + " – " + shortDate(r.longestStreakEnd)] : "0" + countUnit();
     }));
     row("最惨的时候浮亏", each(function (r) { return [pct(r.worstReturn, 1, true), r.worstDate ? shortDate(r.worstDate) : ""]; }));
 
@@ -1409,10 +1425,10 @@
     var axs = weeks.map(function (c) { return DCA.dayNumber(c.date); });
     var adates = weeks.map(function (c) { return c.date; });
     var amts = weeks.map(function (c) { return c.amount; });
-    $("amtTitle").textContent = strategyName() + "：每周实际投入";
+    $("amtTitle").textContent = strategyName() + "：" + perWord() + "实际投入";
     $("amtSub").textContent = isTrend()
-      ? "横线是每周基础金额 " + money(cfg.baseAmount) + "：高出来的是加码，低下去的是涨太多时少投"
-      : "横线是每周基础金额 " + money(cfg.baseAmount) + "，高出来的部分就是加码";
+      ? "横线是" + baseWord() + " " + money(cfg.baseAmount) + "：高出来的是加码，低下去的是涨太多时少投"
+      : "横线是" + baseWord() + " " + money(cfg.baseAmount) + "，高出来的部分就是加码";
     drawChart($("amtChart"), {
       xs: axs, dates: adates,
       height: 180,
@@ -1420,12 +1436,12 @@
       yFormat: function (v) { return v === 0 ? "$0" : money(v); },
       yFloor: 0,
       refLines: [{ y: cfg.baseAmount, label: "基础金额" }],
-      ariaLabel: strategyName() + "每周投入金额。最多一周 " + money(cur.maxAmount) + "。",
+      ariaLabel: strategyName() + perWord() + "投入金额。单次最多 " + money(cur.maxAmount) + "。",
       tipTitle: function (i) { return cnDate(adates[i], true); },
       tipRows: function (i) {
         var w = weeks[i];
         var rows = [
-          { color: color, value: money(amts[i]), label: "这周投入" },
+          { color: color, value: money(amts[i]), label: isDaily() ? "这天投入" : "这周投入" },
           { color: null, value: times(w.multiplier), label: w.state ? trendStateName(w.state, w.drawdown) : "倍数" },
           { color: null, value: w.drawdown < 0.05 ? "0%" : MINUS + w.drawdown.toFixed(1) + "%", label: "前一天回撤" },
         ];
@@ -1482,8 +1498,8 @@
       row.appendChild(el("td", null, pct(r.plain.xirr, 2)));
       row.appendChild(cell(pct(r.tiered.xirr, 2), diffText(dT)));
       row.appendChild(cell(pct(r.trend.xirr, 2), diffText(dR)));
-      row.appendChild(cell(pct(r.investedRatio - 1, 0, true), "连续加码 " + r.tiered.longestStreak + " 周"));
-      row.appendChild(cell(pct(r.trendInvestedRatio - 1, 0, true), "连续加码 " + r.trend.longestStreak + " 周"));
+      row.appendChild(cell(pct(r.investedRatio - 1, 0, true), "连续加码 " + r.tiered.longestStreak + countUnit()));
+      row.appendChild(cell(pct(r.trendInvestedRatio - 1, 0, true), "连续加码 " + r.trend.longestStreak + countUnit()));
       tb.appendChild(row);
     });
     function summary(key) {
@@ -1523,11 +1539,11 @@
     var full = DCA.backtest(s, cfg, { strategy: cfg.strategy, dd: cache.dd.dd, dev: cache.tl.dev });
     if (full) {
       fact("加码要准备备用金",
-        "用现在的设置，如果从 " + cnDate(full.startDate) + " 就开始，单周最多要投 " + money(full.maxAmount) +
-        "，最长连续 " + full.longestStreak + " 周在加码，总投入是普通定投的 " + (full.invested / (cfg.baseAmount * full.weeks)).toFixed(2) +
+        "用现在的设置，如果从 " + cnDate(full.startDate) + " 就开始，单次最多要投 " + money(full.maxAmount) +
+        "，最长连续 " + full.longestStreak + countUnit() + "在加码，总投入是普通定投的 " + (full.invested / (cfg.baseAmount * full.weeks)).toFixed(2) +
         " 倍。先确认自己拿得出这笔钱，否则真跌下来的时候规则执行不了。");
       fact("多投的钱从哪来很重要",
-        "回测里加码规则的年化更高，主要是因为下跌时多投了钱。如果总共能投的钱一样多、没用完的钱先留着等下跌，历史上每周按时全部投进去反而更好。所以加码用的钱最好是本来不会拿去投资的钱（比如备用的奖金）。");
+        "回测里加码规则的年化更高，主要是因为下跌时多投了钱。如果总共能投的钱一样多、没用完的钱先留着等下跌，历史上按时全部投进去反而更好。所以加码用的钱最好是本来不会拿去投资的钱（比如备用的奖金）。");
     }
     if (trend) {
       fact("均线会慢半拍",
@@ -1618,16 +1634,17 @@
       if (!(b > 0)) return;
       state.cfg.baseAmount = b;
       applyConfig();
-      $("pApplyMsg").textContent = "已把每周基础金额改成 " + smallMoney(b) + "，上面的信号、下面的回测和买入记录都按这个金额算。";
+      $("pApplyMsg").textContent = "已把" + baseWord() + "改成 " + smallMoney(b) + "，上面的信号、下面的回测和买入记录都按这个金额算。";
     });
   }
 
   function renderPlanner() {
     if (!state.series || !cache.mults) return;
     var rateOk = Number(plan.rate) > 0;
-    var input = { cash: plan.cash, monthly: plan.monthly, share: plan.share, weeks: plan.weeks, rate: rateOk ? plan.rate : DEFAULT_RATE, mode: plan.mode };
+    var input = { cash: plan.cash, monthly: plan.monthly, share: plan.share, weeks: plan.weeks, perWeek: isDaily() ? 5 : 1, rate: rateOk ? plan.rate : DEFAULT_RATE, mode: plan.mode };
     var r = DCA.planBudget(cache.mults, input, cache.sig.multiplier);
     cache.plan = r;
+    $("pTitle").textContent = "我的资金计划：" + (isDaily() ? "下次投多少" : "这周投多少");
     $("pChoiceSafe").setAttribute("aria-checked", String(r.mode === "safe"));
     $("pChoiceAvg").setAttribute("aria-checked", String(r.mode === "avg"));
     $("pEmpty").hidden = !r.empty;
@@ -1642,11 +1659,11 @@
 
     var name = isTrend() ? DCA.TREND_LABELS[cache.sig.state] : "离最高点跌 " + cache.sig.drawdown.toFixed(1) + "%";
     var m0 = r.nowMultiplier;
-    $("pHeadline").textContent = "这周（" + cnDate(cache.sig.nextDate, true) + "）按规则是 " + times(m0) + "（" + name + "）。按你的钱算，可以投：";
+    $("pHeadline").textContent = (isDaily() ? "下个定投日（" : "这周（") + cnDate(cache.sig.nextDate, true) + "）按规则是 " + times(m0) + "（" + name + "）。按你的钱算，可以投：";
     function choice(id, base, sub) {
       var btn = $(id);
       btn.querySelector(".pc-amount").textContent = smallMoney(base * m0);
-      btn.querySelector(".pc-sub").textContent = "约 " + yuan(base * m0 * r.rate) + " · 每周基础金额 " + smallMoney(base) + " · " + sub;
+      btn.querySelector(".pc-sub").textContent = "约 " + yuan(base * m0 * r.rate) + " · " + baseWord() + " " + smallMoney(base) + " · " + sub;
     }
     choice("pChoiceSafe", r.baseSafe, "历史上最难的一段时间也够用");
     choice("pChoiceAvg", r.baseAvg, "长期刚好投完，大跌时要另外准备钱");
@@ -1665,13 +1682,13 @@
     if (r.monthlyLocal > 0) poolParts.push("每月 " + yuan(r.monthlyLocal));
     var weeklyIn = r.pool / r.weeks + r.inflow;
     tile("拿出来投资的钱", poolParts.join(" + "),
-      (r.poolLocal > 0 ? "现在这笔分 " + weeksText(r.weeks) + "投完；" : "") + "平均每周能拿出 " + smallMoney(weeklyIn) + "（约 " + yuan(weeklyIn * r.rate) + "）");
+      (r.poolLocal > 0 ? "现在这笔分 " + weeksText(r.weeks) + "投完；" : "") + "平均" + perWord() + "能拿出 " + smallMoney(weeklyIn) + "（约 " + yuan(weeklyIn * r.rate) + "）");
     var keep = weeklyIn - r.avgWeekly;
-    tile("平时平均每周投", smallMoney(r.avgWeekly),
+    tile("平时平均" + perWord() + "投", smallMoney(r.avgWeekly),
       r.mode === "safe"
-        ? (keep > 0.005 ? "平时每周大约留下 " + smallMoney(keep) + "（约 " + yuan(keep * r.rate) + "），攒着给大跌时加码" : "长期刚好把钱投完")
-        : "长期下来刚好把每周能拿出的钱投完");
-    tile("遇到大跌时", "单周最多 " + smallMoney(r.maxWeekly),
+        ? (keep > 0.005 ? "平时" + perWord() + "大约留下 " + smallMoney(keep) + "（约 " + yuan(keep * r.rate) + "），攒着给大跌时加码" : "长期刚好把钱投完")
+        : "长期下来刚好把能拿出的钱投完");
+    tile("遇到大跌时", "单次最多 " + smallMoney(r.maxWeekly),
       r.shortfall > 0.005
         ? "历史上最难的时候，" + weeksText(r.weeks) + "内还要额外准备约 " + yuan(r.shortfallLocal)
         : "历史上最难的一段时间，按这个金额钱也够用");
@@ -1679,15 +1696,16 @@
     var b = roundBase(r.base);
     var same = Math.abs(b - state.cfg.baseAmount) < 0.005;
     $("pApply").disabled = same || !(b > 0);
-    $("pApply").textContent = same ? "已经按 " + smallMoney(b) + " 计算" : "把每周基础金额设为 " + smallMoney(b);
-    if (!same) $("pApplyMsg").textContent = "上面的信号现在按每周 " + smallMoney(state.cfg.baseAmount) + " 算。";
+    $("pApply").textContent = same ? "已经按 " + smallMoney(b) + " 计算" : "把" + baseWord() + "设为 " + smallMoney(b);
+    if (!same) $("pApplyMsg").textContent = "上面的信号现在按" + perWord() + " " + smallMoney(state.cfg.baseAmount) + " 算。";
 
     if (r.mode === "safe") note("保守方式平时会攒下一些没投的钱。回测里，钱放着等下跌，长期收益不如按时投进去；平均方式投得多，但大跌时要另外准备钱。");
-    else note("平均方式遇到 2000–2002 年、2008 年那样的大跌，会连续很多周按 ×2、×3 投（最难的一年几乎每周都是 ×3），钱不够的话只能先按 ×1 投，或者改成保守方式。");
+    else note("平均方式遇到 2000–2002 年、2008 年那样的大跌，会连续很长时间按 ×2、×3 投（最难的一年几乎每次都是 ×3），钱不够的话只能先按 ×1 投，或者改成保守方式。");
     if (r.thisWeek > 0 && r.thisWeek < state.series.close[state.series.n - 1]) {
       note("QQQ 一股约 " + usd2.format(state.series.close[state.series.n - 1]) + "，金额不到一股时需要券商支持买零碎股；手续费按券商规则另算。");
     }
-    note("定投日提醒按仓库里的默认基础金额 $100 算，按提醒里的倍数（×1、×1.5…）乘你自己的基础金额就行。这里只是按你定的比例和规则算出来的数字，不构成投资建议。");
+    note("定投日提醒按仓库里的默认设置（每周一次、基础金额 $100）算，按提醒里的倍数（×1、×1.5…）乘你自己的基础金额就行。这里只是按你定的比例和规则算出来的数字，不构成投资建议。");
+    if (isDaily()) note("每个交易日投一次，单笔金额会很小：先确认券商没有最低手续费或最低下单金额，否则手续费会吃掉不少收益。");
   }
 
   // ================= 我的买入记录（只存在本机浏览器） =================
