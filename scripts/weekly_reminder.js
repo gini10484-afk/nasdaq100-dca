@@ -3,7 +3,8 @@
  * 由 .github/workflows/weekly-reminder.yml 每个工作日北京时间 20:00 调用；
  * 只有“今天是定投日”才会真的发提醒（可以用 --force 强制发一条测试提醒）。
  *
- * 提醒按 docs/strategy.js 里的 DEFAULT_CONFIG 计算（DEFAULT_CONFIG.strategy 决定按哪个策略提醒，另一个策略的金额也会附在后面）。
+ * 提醒按 docs/strategy.js 里的 DEFAULT_CONFIG 计算（strategy 决定按哪个策略提醒，另一个策略的金额也会附在后面；
+ * frequency 设成 "daily" 时每个工作日都提醒）。
  * 你在网页上改的设置只保存在自己的浏览器里，GitHub 看不到；想让提醒也用新设置，就改 DEFAULT_CONFIG。
  */
 "use strict";
@@ -69,7 +70,7 @@ function buildReminder(data, opts) {
   const cfg = DCA.withDefaults(opts.config || DCA.DEFAULT_CONFIG);
   const today = opts.today;
   const weekday = DCA.weekdayOf(DCA.dayNumber(today));
-  if (!opts.force && weekday !== cfg.investWeekday) {
+  if (!opts.force && cfg.frequency !== "daily" && weekday !== cfg.investWeekday) {
     return { skip: true, reason: `今天（美东 ${today}）不是定投日，不发提醒` };
   }
   const s = DCA.prepare(data);
