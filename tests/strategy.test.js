@@ -453,3 +453,36 @@ test("资金计划：保守方式在历史最坏的时候也够用", () => {
   assert.equal(m.length, DCA.backtest(s, TIERED, {}).weeks);
   assert.ok(m.some((x) => x > 1));
 });
+
+// ---------- 每日定投 ----------
+test("每日定投：每个交易日都投一次", () => {
+  const dates = tradingDays("2026-08-31", 10); // 8-31 周一 … 9-11 周五
+  const s = series(dates, dates.map(() => 100));
+  assert.deepEqual(DCA.investDays(s, 1, "daily"), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(DCA.investDays(s, 1, "weekly").length, 2);
+  // 下一个定投日：周五之后是周一；周一之后是周二
+  assert.equal(DCA.nextInvestDate("2026-09-11", 1, "daily"), "2026-09-14");
+  assert.equal(DCA.nextInvestDate("2026-09-14", 1, "daily"), "2026-09-15");
+  assert.equal(DCA.nextInvestDate("2026-09-11", 1, "weekly"), "2026-09-14");
+
+  const daily = { ...TIERED, frequency: "daily", baseAmount: 10 };
+  const r = DCA.backtest(s, daily, { plain: true });
+  assert.equal(r.weeks, 9); // 第一天没有“前一天”，从第 2 天开始
+  assert.equal(r.invested, 90);
+  const sig = DCA.currentSignal(s, daily);
+  assert.equal(sig.frequency, "daily");
+  assert.equal(sig.nextDate, "2026-09-14");
+  assert.equal(DCA.withDefaults({ frequency: "x" }).frequency, DCA.DEFAULT_CONFIG.frequency);
+  assert.equal(DCA.withDefaults({ frequency: "daily" }).frequency, "daily");
+});
+
+test("每日定投：资金计划按每次金额算", () => {
+  const flat = Array(1500).fill(1);
+  const weekly = DCA.planBudget(flat, { cash: 5200, share: 100, weeks: 52, rate: 1 }, 1);
+  const daily = DCA.planBudget(flat, { cash: 5200, share: 100, weeks: 52, perWeek: 5, rate: 1 }, 1);
+  assert.equal(daily.periods, 260);
+  close(daily.base, weekly.base / 5); // 同样的钱分成 5 倍次数，每次就是 1/5
+  // 每月新增的钱也按次数摊开
+  const m = DCA.planBudget(flat, { monthly: 5200, share: 100, weeks: 52, perWeek: 5, rate: 1 }, 1);
+  close(m.inflow, (5200 * 12) / 52 / 5);
+});
