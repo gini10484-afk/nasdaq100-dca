@@ -2,7 +2,8 @@
  * strategy.js —— 定投规则 + 历史回测（网页和测试共用这一份代码）
  *
  * 两种规则都是：每周选一个交易日定投（默认周一；遇到美股休市，就用这周之后的第一个交易日），
- * 只看"定投日前一个交易日的收盘价"，投入金额 = 每周基础金额 × 倍数。
+ * 或者每个交易日都投一次（frequency: "daily"）；
+ * 只看"定投日前一个交易日的收盘价"，投入金额 = 每次基础金额 × 倍数。
  *
  * 策略一 "跌多多投"（strategy: "tiered"）
  *   离最高点跌得越多（回撤越大），倍数越高。
@@ -37,8 +38,9 @@
   // ===== 默认设置：想改规则，改这里就行 =====
   var DEFAULT_CONFIG = {
     strategy: "trend", // 用哪个策略："tiered"=跌多多投，"trend"=趋势定投（定投日提醒也按这个算）
-    baseAmount: 100, // 每周基础金额（美元）
-    investWeekday: 1, // 定投日：1=周一 2=周二 3=周三 4=周四 5=周五（美东时间）
+    frequency: "weekly", // 多久投一次："weekly"=每周一次，"daily"=每个交易日都投
+    baseAmount: 100, // 每次基础金额（美元）
+    investWeekday: 1, // 每周定投时用哪天：1=周一 2=周二 3=周三 4=周四 5=周五（美东时间）
     basis: "52w", // 回撤参照："ath"=历史最高点，"52w"=近 52 周最高点
     tiers: [
       // 跌多多投：回撤达到 minDrawdown(%) 就用这一档的倍数
@@ -125,6 +127,7 @@
     var wd = Number(c.investWeekday);
     return {
       strategy: c.strategy === "trend" || c.strategy === "tiered" ? c.strategy : DEFAULT_CONFIG.strategy === "trend" ? "trend" : "tiered",
+      frequency: c.frequency === "daily" || c.frequency === "weekly" ? c.frequency : DEFAULT_CONFIG.frequency === "daily" ? "daily" : "weekly",
       baseAmount: isFinite(base) && base > 0 ? base : DEFAULT_CONFIG.baseAmount,
       investWeekday: wd >= 1 && wd <= 5 ? Math.round(wd) : DEFAULT_CONFIG.investWeekday,
       basis: c.basis === "52w" || c.basis === "ath" ? c.basis : DEFAULT_CONFIG.basis,
@@ -250,9 +253,13 @@
     return { multiplier: multiplierFor(dd[prevIdx], cfg.tiers), state: null, downTier: -1 };
   }
 
-  // 每周的定投日（返回数据里的下标）
-  function investDays(series, weekday) {
+  // 定投日（返回数据里的下标）：每周一次就每周挑一天，每日定投就是每个交易日
+  function investDays(series, weekday, frequency) {
     var out = [], n = series.n, day = series.day, i = 0;
+    if (frequency === "daily") {
+      for (i = 0; i < n; i++) out.push(i);
+      return out;
+    }
     while (i < n) {
       var monday = mondayOf(day[i]);
       var j = i, pick = -1;
@@ -273,8 +280,12 @@
   }
 
   // 最新数据之后的下一个定投日（不知道美股假期，遇休市顺延）
-  function nextInvestDate(lastDateStr, weekday) {
+  function nextInvestDate(lastDateStr, weekday, frequency) {
     var d = dayNumber(lastDateStr) + 1;
+    if (frequency === "daily") {
+      while (weekdayOf(d) === 0 || weekdayOf(d) === 6) d++; // 下一个工作日
+      return dateFromDayNumber(d);
+    }
     while (weekdayOf(d) !== weekday) d++;
     return dateFromDayNumber(d);
   }
@@ -294,6 +305,7 @@
     var mult = cfg.strategy === "trend" ? st.multiplier : tieredMult;
     return {
       strategy: cfg.strategy,
+      frequency: cfg.frequency,
       date: series.dates[last],
       close: series.close[last],
       peak: d.peak[last],
@@ -308,7 +320,7 @@
       trendMultiplier: st.multiplier,
       multiplier: mult,
       amount: cfg.baseAmount * mult,
-      nextDate: nextInvestDate(series.dates[last], cfg.investWeekday),
+      nextDate: nextInvestDate(series.dates[last], cfg.investWeekday, cfg.frequency),
       basis: cfg.basis,
     };
   }
@@ -348,7 +360,7 @@
     var mode = opts.plain ? "plain" : opts.strategy === "plain" || opts.strategy === "tiered" || opts.strategy === "trend" ? opts.strategy : cfg.strategy;
     var dd = opts.dd || drawdowns(series, cfg.basis).dd;
     var dev = mode === "trend" ? opts.dev || trendLines(series, cfg.trend.maWindow).dev : null;
-    var days = investDays(series, cfg.investWeekday);
+    var days = investDays(series, cfg.investWeekday, cfg.frequency);
     var startDay = opts.startDate ? dayNumber(opts.startDate) : -Infinity;
 
     var p = 0;
@@ -441,7 +453,7 @@
       strategy: mode,
       startDate: series.dates[firstIdx],
       endDate: series.dates[last],
-      weeks: flows.length,
+      weeks: flows.length, // 定投了多少次（每周定投就是多少周）
       invested: invested,
       finalValue: finalValue,
       profit: finalValue - invested,
@@ -658,7 +670,7 @@
   }
 
   // ---------- 资金计划：手里的闲钱，每周该投多少 ----------
-  // 历史上每个定投周按规则投了几倍（用当前的策略和设置）
+  // 历史上每个定投日按规则投了几倍（用当前的策略和设置；每周定投就是每周一个数）
   function weeklyMultipliers(series, config, pre) {
     pre = pre || {};
     var r = backtest(series, config, { dd: pre.dd, dev: pre.dev });
@@ -673,6 +685,7 @@
   }
 
   // input：{ cash: 现在的闲钱, monthly: 每月新增闲钱, share: 拿出多少比例投资(%), weeks: 现在这笔分几周投完,
+  //          perWeek: 每周投几次（每周定投 1，每日定投 5，默认 1）,
   //          rate: 1 美元换多少本币（人民币就填汇率，美元填 1）, mode: "safe" 保守 | "avg" 平均 }
   // mults：weeklyMultipliers() 的结果；nowMultiplier：这周按规则的倍数
   // 返回的金额：带 Local 的是本币，其余是美元
@@ -687,13 +700,15 @@
     var monthly = num(input.monthly, 0);
     var share = Math.min(100, num(input.share, 0));
     var weeks = Math.max(1, Math.round(num(input.weeks, 52)));
+    var perWeek = Math.max(1, num(input.perWeek, 1));
+    var periods = Math.max(1, Math.round(weeks * perWeek)); // 这段时间里一共投几次
     var rate = num(input.rate, 0) > 0 ? Number(input.rate) : 1;
     var mode = input.mode === "avg" ? "avg" : "safe";
 
     var poolLocal = (cash * share) / 100;
     var monthlyLocal = (monthly * share) / 100;
     var pool = poolLocal / rate; // 现在这笔拿出来投资的钱（美元）
-    var inflow = (monthlyLocal * 12) / 52 / rate; // 每月新增的投资钱，折成每周（美元）
+    var inflow = (monthlyLocal * 12) / 52 / perWeek / rate; // 每月新增的投资钱，折成每次定投（美元）
 
     var n = mults.length;
     var ps = [0], maxMult = 0;
@@ -704,14 +719,14 @@
     var avgMult = n ? ps[n] / n : 1;
     if (!(avgMult > 0)) avgMult = 1;
 
-    // 平均：长期平均下来，每周投的钱 ≈ 每周能拿出来的钱
-    var baseAvg = (pool / weeks + inflow) / avgMult;
+    // 平均：长期平均下来，每次投的钱 ≈ 每次能拿出来的钱
+    var baseAvg = (pool / periods + inflow) / avgMult;
 
-    // 保守：历史上不管从哪一周开始，接下来每一周累计要投的钱，都不超过到那时手里已有的钱
+    // 保守：历史上不管从哪一次开始，接下来每一次累计要投的钱，都不超过到那时手里已有的钱
     var baseSafe = Infinity, worstSum = 0;
-    var span = Math.min(weeks, n);
+    var span = Math.min(periods, n);
     for (var t = 0; t < n; t++) {
-      for (var k = 1; k <= weeks && t + k <= n; k++) {
+      for (var k = 1; k <= periods && t + k <= n; k++) {
         var s = ps[t + k] - ps[t];
         if (s <= 0) continue;
         var b = (pool + inflow * k) / s;
@@ -725,7 +740,7 @@
     function shortfall(base) {
       var worst = 0;
       for (var t2 = 0; t2 < n; t2++) {
-        for (var k2 = 1; k2 <= weeks && t2 + k2 <= n; k2++) {
+        for (var k2 = 1; k2 <= periods && t2 + k2 <= n; k2++) {
           var need = base * (ps[t2 + k2] - ps[t2]) - (pool + inflow * k2);
           if (need > worst) worst = need;
         }
@@ -743,6 +758,8 @@
       mode: mode,
       rate: rate,
       weeks: weeks,
+      periods: periods,
+      perWeek: perWeek,
       poolLocal: poolLocal,
       monthlyLocal: monthlyLocal,
       pool: pool,
@@ -755,12 +772,12 @@
       nowMultiplier: m0,
       thisWeek: base * m0,
       thisWeekLocal: base * m0 * rate,
-      avgWeekly: avgWeekly,
+      avgWeekly: avgWeekly, // 平均每次投多少（每周定投就是每周）
       maxWeekly: base * maxMult,
-      worstSpend: base * worstSum, // 历史上最坏的连续 weeks 周（数据不够就按全部），一共要投多少
+      worstSpend: base * worstSum, // 历史上最坏的连续 periods 次（数据不够就按全部），一共要投多少
       shortfall: gap,
       shortfallLocal: gap * rate,
-      lastsWeeks: pool > 0 ? (burn > 1e-9 ? pool / burn : Infinity) : 0, // 按平均速度，现在这笔钱大约能投多少周
+      lastsWeeks: pool > 0 ? (burn > 1e-9 ? pool / burn : Infinity) : 0, // 按平均速度，现在这笔钱大约够投多少次
     };
   }
 
