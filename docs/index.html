@@ -268,6 +268,8 @@
   @media (max-width: 560px) { .plan-choices { grid-template-columns: 1fr; } }
   .plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; }
   .plan-notes { margin: 12px 0 0; padding-left: 18px; }
+  #anDetails { margin-top: 4px; }
+  #anDetails > summary { cursor: pointer; padding: 6px 0; }
   .plan-notes li + li { margin-top: 2px; }
 
   @media (max-width: 560px) {
@@ -575,6 +577,47 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="anTitle">
+      <div class="section-head"><h2 id="anTitle">每年固定投一笔会怎样</h2></div>
+      <p class="verdict" id="anVerdict"></p>
+      <div class="card">
+        <div class="plan-form">
+          <label class="field">每年投入
+            <span class="unit-input"><span>¥</span><input id="anAmount" type="number" min="0" step="10000" inputmode="decimal"></span>
+          </label>
+          <label class="field">从哪年开始
+            <select id="anYear"></select>
+          </label>
+          <label class="field">怎么投
+            <select id="anMode">
+              <option value="lump">每年年初一次性投</option>
+              <option value="spread">平摊到每次定投</option>
+              <option value="strategy">按当前策略（跌了多投）</option>
+            </select>
+          </label>
+        </div>
+        <div class="tiles" id="anTiles"></div>
+        <details id="anDetails">
+          <summary class="small">每年那笔钱现在值多少</summary>
+          <div class="table-wrap">
+            <table id="anTable">
+              <thead>
+                <tr>
+                  <th scope="col">投入年份</th>
+                  <th scope="col">当年汇率</th>
+                  <th scope="col">换得美元</th>
+                  <th scope="col">现在值</th>
+                  <th scope="col">倍数</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+        <ul class="small plan-notes" id="anNotes"></ul>
       </div>
     </section>
 
@@ -1087,6 +1130,7 @@
     renderDevChart();
     renderBacktest();
     renderStarts();
+    renderAnnual();
     renderFacts();
   }
 
@@ -1708,6 +1752,97 @@
     if (isDaily()) note("每个交易日投一次，单笔金额会很小：先确认券商没有最低手续费或最低下单金额，否则手续费会吃掉不少收益。");
   }
 
+  // ================= 每年固定投一笔 =================
+  var ANNUAL_KEY = "nasdaq100-dca-annual-v1";
+  var annual = { amount: 350000, year: null, mode: "lump" };
+  var ANNUAL_MODE_NAMES = { lump: "每年年初一次性投", spread: "平摊到每次定投", strategy: "按当前策略" };
+
+  function loadAnnual() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(ANNUAL_KEY) || "null");
+      if (saved && typeof saved === "object") ["amount", "year", "mode"].forEach(function (k) { if (saved[k] != null) annual[k] = saved[k]; });
+    } catch (e) { /* 存不了就用默认值 */ }
+  }
+  function saveAnnual() {
+    try { localStorage.setItem(ANNUAL_KEY, JSON.stringify(annual)); } catch (e) { /* 忽略 */ }
+  }
+  function bindAnnual() {
+    loadAnnual();
+    var s = state.series;
+    var first = +s.dates[0].slice(0, 4), last = +s.dates[s.n - 1].slice(0, 4);
+    var sel = $("anYear");
+    sel.textContent = "";
+    for (var y = first; y <= last; y++) {
+      var op = document.createElement("option");
+      op.value = y; op.textContent = y + " 年";
+      sel.appendChild(op);
+    }
+    if (!(annual.year >= first && annual.year <= last)) annual.year = first;
+    sel.value = String(annual.year);
+    $("anAmount").value = annual.amount;
+    $("anMode").value = annual.mode;
+    function read() {
+      annual.amount = $("anAmount").value;
+      annual.year = +$("anYear").value;
+      annual.mode = $("anMode").value;
+      saveAnnual();
+      renderAnnual();
+    }
+    $("anAmount").addEventListener("input", read);
+    $("anYear").addEventListener("change", read);
+    $("anMode").addEventListener("change", read);
+  }
+
+  function renderAnnual() {
+    var s = state.series, cfg = state.cfg;
+    var rate = Number(plan.rate) > 0 ? Number(plan.rate) : DEFAULT_RATE;
+    var r = DCA.annualBacktest(s, cfg, {
+      amount: annual.amount, startYear: annual.year, mode: annual.mode,
+      nowRate: rate, dd: cache.dd.dd, dev: cache.tl.dev,
+    });
+    var tiles = $("anTiles"), tb = $("anTable").tBodies[0], notes = $("anNotes");
+    tiles.textContent = ""; tb.textContent = ""; notes.textContent = "";
+    if (!r) {
+      $("anVerdict").textContent = "填一个每年投入的金额，就能看到从某一年开始一直投到现在会是什么结果。";
+      $("anDetails").hidden = true;
+      return;
+    }
+    $("anDetails").hidden = false;
+    $("anVerdict").textContent =
+      "从 " + cnDate(r.startDate) + " 起，每年投 " + yuan(Number(annual.amount)) + "（" + ANNUAL_MODE_NAMES[r.mode] + "，按当年汇率换成美元买 QQQ），" +
+      "到 " + cnDate(r.endDate) + " 一共投了 " + yuan(r.investedLocal) + "，现在值 " + yuan(r.valueLocal) + "，年化 " + pct(r.xirrLocal, 2) + "（人民币口径）。";
+
+    function tile(label, value, sub) {
+      var t = el("div", "tile");
+      t.appendChild(el("div", "t-label", label));
+      t.appendChild(el("div", "t-value", value));
+      if (sub) t.appendChild(el("div", "t-sub", sub));
+      tiles.appendChild(t);
+    }
+    tile("总共投入", yuan(r.investedLocal), "分 " + r.years.length + " 年、" + r.times + " 次投入 · 折合 " + money(r.investedUsd));
+    tile("现在市值", yuan(r.valueLocal), money(r.valueUsd) + (r.cashUsd > 1 ? "（含没投出去的现金 " + money(r.cashUsd) + "）" : "") + " · " + r.shares.toFixed(1) + " 股");
+    tile("赚了", yuan(r.profitLocal), "总收益率 " + pct(r.totalReturn, 1, true));
+    tile("年化收益率", pct(r.xirrLocal, 2), "人民币口径；只看美元是 " + pct(r.xirrUsd, 2));
+
+    r.years.slice().reverse().forEach(function (y) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, y.year + " 年"));
+      tr.appendChild(el("td", null, y.rate.toFixed(2)));
+      tr.appendChild(el("td", null, money(y.usd)));
+      tr.appendChild(el("td", null, yuan(y.valueLocal)));
+      tr.appendChild(el("td", null, y.multiple.toFixed(2) + " 倍"));
+      tb.appendChild(tr);
+    });
+
+    function note(t) { notes.appendChild(el("li", null, t)); }
+    note("每年的钱按当年的平均汇率换成美元；现在的市值按你在上面“我的资金计划”里填的汇率（1 美元 = " + rate + " 元）换回人民币。");
+    if (r.mode === "strategy") note("“按当前策略”是把每年的钱摊到每次定投，再按规则的倍数投；遇到大跌要多投时，只能用手里攒下的钱，所以最后可能还剩一些现金。");
+    var perYearUsd = r.investedUsd / r.years.length;
+    if (perYearUsd > 50000) note("提醒：个人每年购汇便利化额度是 5 万美元，这个金额（约 " + money(perYearUsd) + "/年）已经超过额度。");
+    note("没有算券商手续费、换汇点差和美股分红预扣税（中国居民 10%），假设可以买零碎股、分红自动再投资。");
+    note("过去 20 多年 QQQ 正好赶上美股科技股的大牛市，以后不一定还有这样的回报。这只是历史回测，不构成投资建议。");
+  }
+
   // ================= 我的买入记录（只存在本机浏览器） =================
   var TRADES_KEY = "nasdaq100-dca-trades-v1";
   var trades = [];
@@ -1973,6 +2108,7 @@
     populateStartYears();
     loadTrades();
     bindPlanner();
+    bindAnnual();
     bindJournal();
     $("app").hidden = false;
     renderAll();
