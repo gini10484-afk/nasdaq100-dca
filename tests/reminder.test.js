@@ -98,3 +98,14 @@ test("默认设置按综合策略提醒", () => {
   assert.match(r.title, /投 \$150（×1\.5）/);
   assert.match(r.body, /如果按「跌多多投」：投 \$100（×1）/);
 });
+
+test("每日定投：每个工作日都提醒", () => {
+  const daily = { ...TIERED, frequency: "daily" };
+  // 周二也发（每周定投时会跳过）
+  const r = buildReminder(makeData(75), { today: "2026-09-15", owner: "me", repo: "r", config: daily });
+  assert.equal(r.skip, false);
+  assert.match(r.title, /9月15日（周二）：投 \$200（×2）/);
+  assert.equal(buildReminder(makeData(75), { today: "2026-09-15", owner: "me", repo: "r", config: TIERED }).skip, true);
+  // 周末不运行工作流，这里也不特殊处理
+  assert.equal(buildReminder({ rows: [] }, { today: "2026-09-15", config: daily }).skip, true);
+});
