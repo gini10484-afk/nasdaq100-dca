@@ -43,6 +43,7 @@ jobs:
 
       - name: 把新数据提交回仓库
         if: steps.data.outcome == 'success'
+        continue-on-error: true # 推送失败不影响下面发布网站
         run: |
           if git diff --quiet -- docs/data.json; then
             echo "数据没有变化，不需要提交"
@@ -51,8 +52,13 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add docs/data.json
             git commit -m "更新 QQQ 行情数据 $(date -u +%Y-%m-%d)"
-            git pull --rebase origin main
-            git push
+            # 别人同时提交时会推送失败，重试几次
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main && git push && exit 0
+              echo "::warning::第 $i 次推送失败，等一下再试"
+              sleep $((i * 10))
+            done
+            echo "::warning::行情数据没能提交回仓库，网站这次仍按新数据发布，下次更新会再试"
           fi
 
       - name: 打包网站文件
