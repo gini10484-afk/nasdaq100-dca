@@ -486,3 +486,71 @@ test("每日定投：资金计划按每次金额算", () => {
   const m = DCA.planBudget(flat, { monthly: 5200, share: 100, weeks: 52, perWeek: 5, rate: 1 }, 1);
   close(m.inflow, (5200 * 12) / 52 / 5);
 });
+
+// ---------- 每年固定投一笔 ----------
+test("每年固定投一笔：年初一次性，按当年汇率换汇", () => {
+  const dates = tradingDays("2023-01-02", 520); // 2023-01-02 起两年，跨 2023 和 2024
+  const s = series(dates, dates.map(() => 100));
+  const rates = { 2023: 10, 2024: 20 };
+  const r = DCA.annualBacktest(s, TIERED, { amount: 1000, startYear: 2023, mode: "lump", rates, nowRate: 10 });
+  assert.equal(r.mode, "lump");
+  assert.equal(r.startDate, "2023-01-02");
+  assert.equal(r.times, 2);
+  assert.equal(r.investedLocal, 2000);
+  close(r.investedUsd, 150); // 1000/10 + 1000/20
+  close(r.shares, 1.5);
+  close(r.valueUsd, 150);
+  close(r.valueLocal, 1500); // 汇率涨了，人民币口径反而亏
+  close(r.totalReturn, -0.25);
+  close(r.totalReturnUsd, 0);
+  assert.equal(r.years.length, 2);
+  assert.equal(r.years[0].year, 2023);
+  close(r.years[0].rate, 10);
+  close(r.years[0].multiple, 1); // 1 股 × $100 × 10 ÷ ¥1000
+  close(r.years[1].multiple, 0.5);
+  // 开始年份太早按数据第一年算，太晚就没得投
+  assert.equal(DCA.annualBacktest(s, TIERED, { amount: 1000, startYear: 1990, mode: "lump", rates, nowRate: 10 }).times, 2);
+  assert.equal(DCA.annualBacktest(s, TIERED, { amount: 1000, startYear: 2099, mode: "lump", rates, nowRate: 10 }), null);
+  assert.equal(DCA.annualBacktest(s, TIERED, { amount: 0, mode: "lump" }), null);
+});
+
+test("每年固定投一笔：摊到每次定投 / 按策略投", () => {
+  const dates = tradingDays("2023-01-02", 520);
+  const s = series(dates, dates.map(() => 100));
+  const rates = { 2023: 10, 2024: 10 };
+  const n = DCA.investDays(s, 1, "weekly").filter((i) => i >= 1).length;
+  const sp = DCA.annualBacktest(s, TIERED, { amount: 5200, startYear: 2023, mode: "spread", rates, nowRate: 10 });
+  assert.equal(sp.times, n);
+  close(sp.investedLocal, 100 * n); // 每年 5200 摊到 52 次，每次 100
+  close(sp.cashUsd, 0);
+  // 价格一直不动时没有回撤，策略倍数恒为 1，结果和平摊一模一样
+  const st = DCA.annualBacktest(s, TIERED, { amount: 5200, startYear: 2023, mode: "strategy", rates, nowRate: 10 });
+  close(st.shares, sp.shares);
+  close(st.cashUsd, 0);
+  // 每日定投时一年按 252 次摊
+  const daily = DCA.annualBacktest(s, { ...TIERED, frequency: "daily" }, { amount: 5040, startYear: 2023, mode: "spread", rates, nowRate: 10 });
+  close(daily.investedLocal, 20 * (s.n - 1));
+});
+
+test("每年固定投一笔：跌的时候策略会先攒钱", () => {
+  const dates = tradingDays("2023-01-02", 520);
+  // 先涨后腰斩，跌下去之后倍数变大，前面攒的钱才够多投
+  const closes = dates.map((_, i) => (i < 200 ? 100 : 50));
+  const s = series(dates, closes);
+  const rates = { 2023: 10, 2024: 10 };
+  const st = DCA.annualBacktest(s, TIERED, { amount: 5200, startYear: 2023, mode: "strategy", rates, nowRate: 10 });
+  const sp = DCA.annualBacktest(s, TIERED, { amount: 5200, startYear: 2023, mode: "spread", rates, nowRate: 10 });
+  close(st.investedLocal, sp.investedLocal); // 投入的钱一样多
+  assert.ok(st.maxCashUsd > 0, "跌之前应该攒下过现金");
+  assert.ok(st.shares > sp.shares, "跌了多投应该买到更多股"); // 同样的钱买到更多股
+});
+
+test("汇率表：没有的年份用最近的一年", () => {
+  const rates = { 2000: 8, 2010: 6 };
+  assert.equal(DCA.rateForYear(1990, rates), 8);
+  assert.equal(DCA.rateForYear(2000, rates), 8);
+  assert.equal(DCA.rateForYear(2005, rates), 6); // 中间年份按最后一个有数据的年份
+  assert.equal(DCA.rateForYear(2030, rates), 6);
+  close(DCA.CNY_RATES[1999], 8.277);
+  assert.ok(DCA.rateForYear(2026) > 0);
+});
